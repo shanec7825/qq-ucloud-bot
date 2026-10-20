@@ -52,7 +52,7 @@ export class PublicCatalog {
 
 export async function routeCommand(command, event, deps) {
   // 公开分支只依赖独立快照；未授权消息无法到达学校、AI 或私人连接器。
-  if (command === '/帮助') return help;
+  if (command === '/帮助') return deps.botName ? help.replace(process.env.BOT_NAME || 'slyra', deps.botName) : help;
   if (command === '/作业') return deps.catalog.list();
   if (command.startsWith('/详情 ')) return deps.catalog.detail(command.slice(4).trim());
   if (command === '/教材') return deps.catalog.books();

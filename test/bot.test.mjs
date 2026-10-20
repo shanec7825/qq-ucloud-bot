@@ -73,13 +73,14 @@ test('真实客户端调用形状、登录态重载、白名单请求头与失�
 });
 
 test('OpenAI 兼容请求使用可配置地址和模型；不发送学校凭据', async () => {
-  const env = { OPENAI_API_KEY: 'fake', OPENAI_MODEL: 'test-model', OPENAI_BASE_URL: 'https://example.com/v1/' };
+  const env = { OPENAI_API_KEY: 'fake', OPENAI_MODEL: 'test-model', OPENAI_BASE_URL: 'https://example.com/v1/', BOT_NAME: '星羽', BOT_SYSTEM_PROMPT: 'CUSTOM_ADMIN_STYLE' };
   const answer = await askAI('安排一下', [task], env, async (url, options) => {
     assert.equal(url.href, 'https://example.com/v1/chat/completions');
     const body = JSON.parse(options.body);
     assert.equal(body.model, 'test-model');
     assert.equal(body.stream, false);
     assert.equal(body.messages.length, 2);
+    assert.match(body.messages[0].content, /星羽/); assert.match(body.messages[0].content, /CUSTOM_ADMIN_STYLE/);
     assert.ok(!options.body.includes('blade-auth'));
     return Response.json({ choices: [{ message: { content: '先做网络作业' } }] });
   });

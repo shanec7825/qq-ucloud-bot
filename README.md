@@ -1,6 +1,36 @@
 # slyra · 北邮教学云 QQ 机器人
 
-用自然语言查询北京邮电大学 UCloud 最近截止的作业、阅读指定教材目录，并在 QQ 中聊天。通过 NapCat / OneBot 11 登录独立机器人 QQ；默认使用官方 Codex CLI 的 ChatGPT 登录，模型为 `gpt-6-luna`，也保留 OpenAI 兼容 API 接口。
+可通过本机网页配置的 QQ AI 机器人：自定义名字和系统提示词、管理群组与记忆，连接 GitHub、Google Drive，并可选查询北京邮电大学 UCloud 最近截止的作业和指定教材目录。通过 NapCat / OneBot 11 登录独立机器人 QQ；默认使用官方 Codex CLI 的 ChatGPT 登录，模型为 `gpt-6-luna`，也保留 OpenAI 兼容 API 接口。
+
+## 网页管理台
+
+```powershell
+npm.cmd ci
+npm.cmd start
+# 在另一个终端打开带本机管理权限的入口。
+npm.cmd run admin:open
+```
+
+管理台默认在 `http://127.0.0.1:6100`，只监听本机；不必预先创建 `.env`。首次启动会生成管理密钥与 `data/admin-launch.html`，也可以手动打开该文件进入。普通 URL 需要登录，启动链接中的密钥只用于建立 HttpOnly 会话，随后从地址中移除。不要分享启动链接或此 HTML 文件。管理台不是面向公网部署的多用户服务。
+
+| 页面 | 可配置内容 |
+| --- | --- |
+| 机器人 | 名字、主人 QQ、系统提示词、Codex/API 模型、OneBot 地址与 Token、共享教材目录 |
+| 服务连接 | UCloud 学号密码登录与同步间隔、GitHub Token/现有 gh 登录、Google OAuth/现有 rclone 登录、连接测试 |
+| 群组 | 读取 QQ 已加入群、添加/移除/备注、允许回复、每群历史归纳授权 |
+| 记忆 | 启用/停用、上下文条数和时效、长期记忆增删改、群摘要编辑/清空、最近上下文查看与清空 |
+
+“保存并应用”对新的请求生效，修改 OneBot 设置会重新连接；机器人 QQ 的平台昵称与群名片需在 QQ 中单独修改。停用群或更换主人时，在途回答也会重新检查权限。未 @ 的群消息继续在模型入口前过滤。
+
+配置保存在忽略的 `data/settings.json`，首次从现有 `.env` 迁移，之后网页配置优先；修改 `.env` 不会覆盖已保存的网页设置。首次安装没有绑定账号或群组，可先使用管理台完成配置；UCloud 是可选模块，目前仅支持北邮教学云，关闭后仍可自然聊天。
+
+网页填写的连接密钥保存到 `data/secrets.enc.json`，不通过配置接口回显。Windows 使用当前用户 DPAPI；其他系统使用本机密钥文件和 AES-256-GCM，密钥文件与数据目录都需限制访问。已有 `.env`、gh、rclone 登录可继续沿用；显式清除密钥会阻止回退到旧环境值。学校密码仅用于本次认证，不保存。API 测试会发起一次请求，可能按所配服务计费。
+
+GitHub 可使用只授权指定仓库的细粒度 Token（Contents/Metadata 只读）。Google 新连接需要自己的 OAuth Client ID/Secret、启用 Drive API，并按网页显示登记回调地址，默认 `http://127.0.0.1:6100/oauth/google/callback`；使用 `state`、PKCE 与 `drive.readonly` 范围。未验证的自建客户端可能需要把本人加入测试用户。也可直接沿用已有本机登录，管理台会区分“已有配置”和“实际连接测试成功”。私人 Drive 支持目录、文本代码及可导出的 Google 文档，单文件最多 32KB。
+
+长期记忆由管理员显式维护，支持全局、指定群、指定私聊；全局内容用于所有会话，私人资料应放在私聊范围。每次最多参考最近 20 条、共 6000 字符。最近对话仅在内存保存，重启或到期后清空；长期记忆和群摘要会持久保存。清空摘要不会重置历史归纳的调用频率限制，原始导出文件仍在本机。
+
+QQ 登录仍需先安装并运行 NapCat，Codex 订阅登录需本机官方 CLI；安装流程见下文。可选 `ADMIN_PORT` 环境变量更换管理端口，需重启生效并同步更新 Google 回调地址。
 
 ```text
 @slyra 最近什么作业快截止了？
@@ -44,7 +74,7 @@
 ALLOWED_GROUPS=100000001,100000002
 ```
 
-所有允许群仍必须 @，共享同一份公开作业和教材目录，聊天上下文隔离。空列表表示不响应任何群，新入群不会自动开放权限。旧 `NATURAL_GROUPS` 配置不再允许免 @。
+所有允许群仍必须 @，共享同一份公开作业和教材目录，聊天上下文隔离。空列表表示不响应任何群，新入群不会自动开放权限。旧 `NATURAL_GROUPS` 配置不再允许免 @。已有网页配置时，请在管理台设置群组，以下环境变量仅用于首次迁移。
 
 历史归纳另行授权，加入允许列表不等于允许导出历史：
 
@@ -164,7 +194,9 @@ node --env-file=.env scripts/export-dorm.mjs 群号
 
 ## 验证与存储
 
-`npm test` 当前 37 项通过，覆盖权限、必须 @、多群隔离、表情名称、媒体范围、引用隔离、历史调用频率、学校认证和并发续期等行为。实际集成曾验证学校登录与续期、Codex Luna 文字与图片、教材索引、扫描页渲染，以及本机合成音视频识别。已验证真实群图片从新 QQ 域名下载并转成模型用 PNG；QQ 语音、视频的完整真实下载链路仍需现场验证。
+`npm test` 覆盖网页鉴权/Host/CSRF、配置到 QQ 的生效路径、密钥不回显、记忆隔离、Google OAuth 状态与续期，以及原有群权限、表情、附件、学校登录和续期。`node scripts/check-admin-ui.mjs` 在隔离的临时配置下验证真实 Chrome 网页交互与移动布局，不调用真实外部账号、模型或 QQ 发信。实际集成已验证管理台沿用的 QQ、UCloud、GitHub 和 Google Drive 连接；新 Google OAuth 客户端授权需用户完成 Google 同意页，自动测试使用协议替身。
+
+既有 Codex Luna 文字与图片、教材索引、扫描页渲染、本机合成音视频识别，以及真实 QQ 图片下载转换已验证。QQ 语音、视频完整真实下载链路仍需现场验证。
 
 `.env`、`data/`、`tools/`、`node_modules/` 和二维码不纳入仓库，其中可能含会话、OAuth 凭据、历史聊天和 QQ 缓存。迁移机器时重新安装和授权。Windows 目录保护使用 ACL。NapCat 是社区 QQ 自动化方案，协议与账号可用性可能变化。
 
@@ -176,3 +208,4 @@ node --env-file=.env scripts/export-dorm.mjs 群号
 - [byrdocs/bupt-auth](https://github.com/byrdocs/bupt-auth)：标准 CAS / UCloud 认证流程参考，本项目独立实现，不使用第三方验证码 OCR。
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)：协议适配；表情名称数据来源及许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 - [Codex CLI](https://github.com/openai/codex)、[rclone Drive](https://rclone.org/drive/)、[GitHub CLI](https://cli.github.com/manual/gh_auth_login)。
+- [Google OAuth 2.0](https://developers.google.com/identity/protocols/oauth2/web-server)、[桌面 OAuth 与 PKCE](https://developers.google.com/identity/protocols/oauth2/native-app)、[Drive files.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list)。

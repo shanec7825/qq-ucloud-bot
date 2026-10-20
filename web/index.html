@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>slyra 管理台</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<body>
+<a class="skip" href="#main">跳到设置内容</a>
+<div id="login" class="login" hidden>
+  <div class="mark" aria-hidden="true">s</div><h1>打开你的机器人工作台</h1><p>这是运行在本机的管理页面。使用启动链接，或输入本机管理密钥。</p>
+  <form id="login-form"><label for="admin-key">管理密钥</label><input id="admin-key" type="password" autocomplete="current-password" required><button class="primary" type="submit">进入管理台</button></form>
+  <p class="hint">忘记入口？在项目目录运行 <code>npm run admin:open</code>。</p>
+</div>
+<div id="shell" class="shell" hidden>
+  <aside class="sidebar">
+    <a class="brand" href="#bot"><span class="mark" aria-hidden="true">s</span><span><strong id="brand-name">slyra</strong><small>机器人工作台</small></span></a>
+    <nav aria-label="设置导航">
+      <a href="#bot" data-tab="bot"><span class="nav-icon" aria-hidden="true">◈</span>机器人</a>
+      <a href="#connections" data-tab="connections"><span class="nav-icon" aria-hidden="true">↔</span>服务连接</a>
+      <a href="#groups" data-tab="groups"><span class="nav-icon" aria-hidden="true">▦</span>群组</a>
+      <a href="#memory" data-tab="memory"><span class="nav-icon" aria-hidden="true">▤</span>记忆</a>
+    </nav>
+    <div class="sidebar-bottom"><span class="local-indicator"></span><span>仅在这台电脑上运行</span><button id="logout" class="text-button">退出管理台</button></div>
+  </aside>
+  <div class="workspace">
+    <header><div><span class="eyebrow">我的机器人</span><span class="header-separator">/</span><span id="page-label">机器人</span></div><span id="qq-status" class="badge">检查连接中</span></header>
+    <main id="main" tabindex="-1">
+      <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+      <form id="settings-form" novalidate>
+        <section data-view="bot">
+          <div class="page-heading"><div><h1>让它成为你的机器人</h1><p>一个名字，一种表达方式。其他事，交给它处理。</p></div><div class="identity-orbit" aria-hidden="true"><span>s</span></div></div>
+          <div class="panel">
+            <div class="section-heading"><h2>身份</h2><p>名字会用于回答，QQ 群名片需在 QQ 中单独修改。</p></div>
+            <div class="two-columns"><label>机器人名字<input data-setting="bot.name" maxlength="40" required autocomplete="off"></label><label>主人 QQ<input data-setting="bot.ownerQQ" inputmode="numeric" pattern="[0-9]{5,15}" autocomplete="off"><span class="hint">只有这个账号的私聊能访问私人资料。</span></label></div>
+            <label>系统提示词<textarea data-setting="bot.systemPrompt" rows="7" maxlength="12000" placeholder="描述它如何说话、处理问题，以及你希望它记住的回答原则。"></textarea></label><p class="hint">控制语气和回答方式；资料访问权限仍由程序控制。只对之后的请求生效。</p>
+          </div>
+          <div class="panel">
+            <div class="section-heading"><h2>模型</h2><p>选用现有订阅，或连接你自己的兼容服务。</p></div>
+            <div class="two-columns"><label>接入方式<select data-setting="ai.backend"><option value="codex">Codex · ChatGPT 订阅</option><option value="api">OpenAI 兼容 API</option></select></label><label id="codex-model">Codex 模型<input data-setting="ai.model" maxlength="100" list="model-options" required><datalist id="model-options"><option value="gpt-6-luna"></option><option value="gpt-6.1-sol"></option></datalist></label></div>
+            <p id="codex-help" class="hint">沿用本机 Codex 的 ChatGPT 登录。模型须在你的账号中可用，额度不足时不会自动改成 API。</p>
+            <div id="api-options" hidden><label>API 根地址<input data-setting="ai.baseURL" type="url" placeholder="https://api.openai.com/v1"></label><div class="two-columns"><label>API 模型<input data-setting="ai.apiModel" maxlength="100"></label><label>API Key<input data-secret="openaiKey" type="password" autocomplete="new-password"><span class="hint" data-secret-status="openaiKey"></span></label></div><p class="hint">API 单独计费。当前兼容 API 路径以文本为主，完整看图能力请使用 Codex。</p></div>
+            <div class="action-row"><button type="button" data-check="model">测试当前模型</button><span id="check-model" class="hint">测试会发起一次模型请求。</span></div>
+          </div>
+          <details class="panel"><summary>QQ 连接与共享教材</summary><div class="details-content"><label>OneBot WebSocket 地址<input data-setting="qq.url" type="url" required></label><label>OneBot Token<input data-secret="onebotToken" type="password" autocomplete="new-password"><span class="hint" data-secret-status="onebotToken"></span></label><p class="hint">地址和 Token 与 NapCat 中一致；修改后管理台会重新连接 QQ。</p><label>共享教材目录<input data-setting="library.root" placeholder="C:/path/to/knowledge/pdfs"></label><label class="check"><input type="checkbox" data-setting="library.sendToModel">允许将这个目录中检索到的教材片段与指定页图片发给模型</label><p class="hint">允许群中的成员可查此目录，目录之外的个人笔记不共享。</p></div></details>
+        </section>
+        <section data-view="connections" hidden>
+          <div class="page-heading"><div><h1>连接你的资料</h1><p>给机器人需要的访问能力，私人资料仍只在主人私聊中读取。</p></div></div>
+          <div class="connection panel">
+            <div class="service-heading"><span class="service-logo school" aria-hidden="true">U</span><div><h2>UCloud</h2><p>北京邮电大学教学云 · 最近截止作业</p></div><span class="badge" data-service-state="ucloud">未检查</span></div>
+            <label class="check"><input type="checkbox" data-setting="school.enabled">启用教学云作业</label>
+            <div class="two-columns"><label>检查间隔（秒）<input type="number" data-setting="school.pollSeconds" min="60" max="86400" required></label><label class="check"><input type="checkbox" data-setting="school.reminders">将截止提醒发给主人私聊</label></div>
+            <div class="credential-box"><div class="two-columns"><label>学号<input id="school-user" autocomplete="username" maxlength="80"></label><label>学校密码<input id="school-password" type="password" autocomplete="current-password" maxlength="500"></label></div><div class="action-row"><button id="school-login" type="button">登录学校账号</button><span class="hint">密码仅用于本次登录，不保存。出现验证码时会提示。</span></div></div>
+            <div class="action-row"><button type="button" data-check="ucloud">同步并测试</button><span id="check-ucloud" class="hint"></span></div>
+          </div>
+          <div class="connection panel">
+            <div class="service-heading"><span class="service-logo github" aria-hidden="true">G</span><div><h2>GitHub</h2><p>仓库目录、README 与文本文件</p></div><span class="badge" data-service-state="github">未检查</span></div>
+            <label class="check"><input type="checkbox" data-setting="github.enabled">启用 GitHub 读取</label>
+            <div class="two-columns"><label>授权方式<select data-setting="github.authMode"><option value="existing">沿用本机 gh 登录</option><option value="token">使用我自己的 Token</option></select></label><label>默认仓库（可选）<input data-setting="github.defaultRepo" placeholder="owner/repository" maxlength="200"></label></div>
+            <div id="github-token-options"><label>GitHub Token<input type="password" data-secret="githubToken" autocomplete="new-password"><span class="hint" data-secret-status="githubToken"></span></label><p class="hint">建议使用仅指定仓库、Contents 和 Metadata 只读权限的细粒度 Token。</p></div>
+            <p id="github-existing-help" class="hint">使用项目 data/gh 中已有的授权。新设备可以选择 Token，直接在本页设置。</p>
+            <div class="action-row"><button type="button" data-check="github">测试 GitHub</button><span id="check-github" class="hint"></span></div>
+          </div>
+          <div class="connection panel">
+            <div class="service-heading"><span class="service-logo drive" aria-hidden="true">D</span><div><h2>Google Drive</h2><p>只读连接你的云盘</p></div><span class="badge" data-service-state="drive">未检查</span></div>
+            <label class="check"><input type="checkbox" data-setting="drive.enabled">启用 Google Drive 读取</label>
+            <label>授权方式<select data-setting="drive.authMode"><option value="existing">沿用本机 rclone 登录</option><option value="oauth">使用自己的 Google OAuth 客户端</option></select></label>
+            <div id="google-oauth-options"><div class="two-columns"><label>OAuth Client ID<input data-setting="drive.clientId" maxlength="250" placeholder="….apps.googleusercontent.com"></label><label>Client Secret<input data-secret="googleClientSecret" type="password" autocomplete="new-password"><span class="hint" data-secret-status="googleClientSecret"></span></label></div><p class="hint">在 Google Cloud 启用 Drive API，并创建 OAuth 客户端。网页应用类型需把下面地址登记为授权回调；仅申请 Drive 只读权限。</p><div class="copy-row"><code id="google-redirect"></code><button id="copy-redirect" type="button">复制回调地址</button></div><div class="action-row"><button id="google-authorize" type="button">在 Google 中授权</button></div><p class="hint">授权页会在浏览器中打开；未验证的自建应用可能需要把自己加入测试用户。</p></div>
+            <label>起始文件夹 ID（可选）<input data-setting="drive.rootFolderId" placeholder="留空为云盘根目录" maxlength="200"></label>
+            <p class="hint">这里是私人 Drive 连接。群内教材共享仍使用“机器人”页设置的本机教材目录。</p>
+            <div class="action-row"><button type="button" data-check="drive">测试 Google Drive</button><span id="check-drive" class="hint"></span></div>
+          </div>
+        </section>
+        <section data-view="groups" hidden>
+          <div class="page-heading"><div><h1>在需要的群里出现</h1><p>每个群都需要 @ 才回复。开启一个群，不会开放你的私人笔记。</p></div></div>
+          <div class="panel"><div class="section-heading"><h2>允许响应的群</h2><p>机器人需先加入 QQ 群。群里可使用公开作业和共享教材，各群对话互相隔离。</p></div><div id="group-list"></div><div class="inline-add"><label>群号<input id="new-group-id" inputmode="numeric" placeholder="输入 QQ 群号"></label><label>备注名称<input id="new-group-name" maxlength="80" placeholder="方便你识别"></label><button id="add-group" type="button">添加群组</button></div><div class="action-row"><button id="discover-groups" type="button">从 QQ 读取已加入的群</button></div><div id="group-discovery"></div></div>
+          <div class="panel"><div class="section-heading"><h2>历史背景</h2><p>普通群消息不会逐条交给模型。需要历史背景时，批量导出并归纳。</p></div><label class="check"><input type="checkbox" data-setting="history.enabled">启用定期历史归纳</label><p class="hint">还需在对应群勾选“允许历史归纳”。最多每 24 小时处理一次；新增文字不足 20 条不调用模型。最多发送 300 条脱敏样本给当前模型，API 模式按配置服务计费。需要本机 QQ Chat Exporter 插件。</p></div>
+        </section>
+        <section data-view="memory" hidden>
+          <div class="page-heading"><div><h1>决定它记住什么</h1><p>管理长期记忆、群历史摘要和最近的对话上下文。</p></div></div>
+          <div class="panel"><div class="section-heading"><h2>记忆方式</h2></div><label class="check"><input type="checkbox" data-setting="memory.enabled">在回答中使用记忆</label><div class="two-columns"><label>最近上下文条数<input type="number" data-setting="memory.recentLimit" min="2" max="40" required></label><label>上下文保留时间（分钟）<input type="number" data-setting="memory.ttlMinutes" min="1" max="1440" required></label></div><p class="hint">关闭后不向模型提供已有笔记与历史摘要，也不记录新上下文。已保存内容仍可在下面管理。</p></div>
+        </section>
+      </form>
+      <div id="memory-tools" hidden>
+        <div class="panel"><div class="section-heading"><h2>长期记忆</h2><p>由你添加和编辑，重启后依然保留。全局记忆会用于所有会话。</p></div><form id="note-form"><label>可见范围<select id="note-scope"></select></label><label>记忆内容<textarea id="note-text" rows="3" maxlength="2000" required placeholder="例如：回答教材问题时先给直观例子，再写正式定义。"></textarea></label><div class="action-row"><button class="secondary" type="submit" id="save-note">添加记忆</button><button type="button" id="cancel-note" hidden>取消编辑</button></div></form><div id="note-list"></div></div>
+        <div class="panel"><div class="section-heading"><h2>群历史摘要</h2><p>可修订或清空当前摘要；原始导出文件仍只保存在本机。</p></div><label>群组<select id="digest-group"></select></label><label>摘要<textarea id="digest-text" rows="5" maxlength="1000"></textarea></label><p id="digest-meta" class="hint"></p><div class="action-row"><button id="save-digest" type="button">保存摘要</button><button id="clear-digest" type="button" class="danger-text">清空摘要</button></div></div>
+        <div class="panel"><div class="section-heading"><h2>最近对话</h2><p>只记录机器人实际回应的消息，不包括未 @ 的普通群消息；重启后自动清空。</p></div><div id="conversation-list"></div><button id="clear-conversations" type="button" class="danger-text">清空全部最近上下文</button></div>
+      </div>
+    </main>
+    <footer class="save-bar"><span id="save-state">已载入本机配置</span><div><button id="reload" type="button">重新载入</button><button class="primary" id="save-settings" type="submit" form="settings-form">保存并应用</button></div></footer>
+  </div>
+</div>
+</body></html>

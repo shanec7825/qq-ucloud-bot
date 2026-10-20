@@ -8,7 +8,7 @@ export class PrivateResources {
   constructor(env = process.env, runner = execute) { this.env = env; this.runner = runner; }
   async run(file, args, extraEnv = {}) {
     try {
-      const { stdout } = await this.runner(file, args, { windowsHide: true, shell: false, encoding: 'utf8', timeout: 45000, maxBuffer: 2 * 1024 * 1024, env: { ...process.env, ...extraEnv } });
+      const { stdout } = await this.runner(file, args, { windowsHide: true, shell: false, encoding: 'utf8', timeout: 45000, maxBuffer: 2 * 1024 * 1024, env: { ...process.env, ...this.env, ...extraEnv } });
       return stdout;
     } catch { throw new Error('私人资源读取失败：请检查对应服务的登录、路径和权限，运行 npm run connect:drive 或 npm run connect:github。'); }
   }

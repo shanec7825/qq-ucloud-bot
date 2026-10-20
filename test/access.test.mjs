@@ -125,6 +125,7 @@ test('订阅模型不继承 API 密钥、连接器或上下文会话，并检查
     });
     return child;
   };
-  assert.equal(await askCodex('测试', {}, { OPENAI_API_KEY: 'secret', GH_TOKEN: 'secret' }, spawn), '连接成功');
+  assert.equal(await askCodex('测试', {}, { OPENAI_API_KEY: 'secret', GH_TOKEN: 'secret', BOT_NAME: '星羽', BOT_SYSTEM_PROMPT: 'CUSTOM_ADMIN_STYLE' }, spawn), '连接成功');
   assert.ok(!receivedInput.includes('secret'));
+  assert.ok(receivedInput.includes('星羽')); assert.ok(receivedInput.includes('CUSTOM_ADMIN_STYLE'));
 });

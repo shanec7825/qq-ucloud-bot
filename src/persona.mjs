@@ -18,20 +18,24 @@ export function styleSamples(messages, selfId) {
 }
 
 export class ConversationMemory {
-  constructor(limit = 16) { this.limit = limit; this.sessions = new Map(); }
+  constructor(limit = 16) { this.limit = limit; this.ttl = 3600000; this.enabled = true; this.sessions = new Map(); this.version = 0; }
+  configure({ recentLimit, ttlMinutes, enabled }) { this.limit = recentLimit; this.ttl = ttlMinutes * 60000; this.enabled = enabled; for (const session of this.sessions.values()) session.entries = session.entries.slice(-this.limit); }
   key(event) { return event.message_type === 'group' ? `group:${event.group_id}` : `private:${event.user_id}`; }
   add(event, text, assistant = false) {
+    if (!this.enabled) return;
     const key = this.key(event);
     const existing = this.sessions.get(key);
-    const session = existing && Date.now() - existing.touched <= 3600000 ? existing : { aliases: new Map(), entries: [], touched: Date.now() };
+    const session = existing && Date.now() - existing.touched <= this.ttl ? existing : { aliases: new Map(), entries: [], touched: Date.now() };
     const id = String(event.user_id);
     if (!session.aliases.has(id)) session.aliases.set(id, '群友' + (session.aliases.size + 1));
     session.entries.push({ speaker: assistant ? '机器人' : event.message_type === 'group' ? session.aliases.get(id) : '用户', text: String(text).slice(0, 1500) });
     session.entries = session.entries.slice(-this.limit); session.touched = Date.now(); this.sessions.set(key, session);
-    for (const [sessionKey, value] of this.sessions) if (Date.now() - value.touched > 3600000) this.sessions.delete(sessionKey);
+    for (const [sessionKey, value] of this.sessions) if (Date.now() - value.touched > this.ttl) this.sessions.delete(sessionKey);
     if (this.sessions.size > 100) this.sessions.delete(this.sessions.keys().next().value);
   }
-  get(event) { return this.sessions.get(this.key(event))?.entries || []; }
+  get(event) { const session = this.sessions.get(this.key(event)); return this.enabled && session && Date.now() - session.touched <= this.ttl ? session.entries : []; }
+  list() { return [...this.sessions].filter(([, session]) => Date.now() - session.touched <= this.ttl).map(([scope, session]) => ({ scope, touched: session.touched, entries: session.entries })); }
+  clear(scope) { this.version++; if (scope === 'all') this.sessions.clear(); else this.sessions.delete(scope); }
 }
 
 export async function loadPersona(groupId) {

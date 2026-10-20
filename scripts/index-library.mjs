@@ -1,5 +1,7 @@
 import { SharedLibrary } from '../src/shared-library.mjs';
-const library = new SharedLibrary(process.env.SHARED_PDFS_ROOT);
+import { SettingsStore } from '../src/settings.mjs';
+const settings = new SettingsStore(); await settings.load();
+const library = new SharedLibrary(settings.get().library.root);
 const files = await library.scan();
 console.log(`找到 ${files.length} 个授权目录内的教材或课件。`);
 let success = 0;
