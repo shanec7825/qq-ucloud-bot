@@ -86,8 +86,8 @@ export async function fetchImage(value, fetcher = fetch) {
 
 export class MessageMedia {
   constructor(bot, download = fetchImage) { this.bot = bot; this.download = download; }
-  async prepare(event) {
-    const images = [], notes = []; let folder;
+  async prepare(event, { describe } = {}) {
+    const images = [], notes = [], quotes = []; let folder;
     const ensureFolder = async () => { if (!folder) { const root = new URL('../data/message-media/', import.meta.url); await mkdir(root, { recursive: true }); folder = await mkdtemp(fileURLToPath(new URL('request-', root))); } return folder; };
     const queue = [...segments(event)].map(part => ({ part, depth: 0 }));
     try {
@@ -118,7 +118,10 @@ export class MessageMedia {
             const same = event.message_type === 'group' ? message.message_type === 'group' && String(message.group_id) === String(event.group_id) :
               message.message_type === 'private' && (String(message.user_id ?? message.sender?.user_id) === String(event.user_id) || String(message.target_id) === String(event.user_id) && String(message.user_id ?? message.sender?.user_id) === String(event.self_id));
             if (!same) { notes.push('引用不属于当前会话，未读取。'); continue; }
-            notes.push('被引用内容：' + contentText(message));
+            const quote = { ...(describe ? describe({ ...event, ...message, sender: message.sender || {}, user_id: message.user_id ?? message.sender?.user_id }) : { senderName: String(message.sender?.card || message.sender?.nickname || '').slice(0, 60) }),
+              messageId: String(message.message_id ?? data.id).slice(0, 40), text: contentText(message).slice(0, 2000) };
+            quotes.push(quote);
+            notes.push('被引用内容（作者见 quotes）：' + quote.text);
             queue.push(...segments(message).map(part => ({ part, depth: depth + 1 })));
           } catch { notes.push('引用消息已失效或不可见。'); }
         } else if (['forward', 'node'].includes(part.type) && depth < 1) {
@@ -126,7 +129,7 @@ export class MessageMedia {
             const rows = Array.isArray(data.content) ? data.content : (await this.bot.call('get_forward_msg', { id: data.id })).messages;
             for (const row of (rows || []).slice(0, 12)) {
               const message = { message: row.message || row.content || [] };
-              notes.push('转发内容：' + contentText(message));
+              notes.push('转发内容（不是当前发送者本人发言），作者 ' + String(row.sender?.card || row.sender?.nickname || row.nickname || '未知').slice(0, 60) + '：' + contentText(message));
               queue.push(...segments(message).map(part => ({ part, depth: depth + 1 })));
             }
           } catch { notes.push('合并转发暂时不可读取。'); }
@@ -164,7 +167,7 @@ export class MessageMedia {
           } catch { notes.push('文件正文暂不可读取（格式、大小或下载受限），不能假装读过。'); }
         }
       }
-      return { images, notes: notes.join('\n').slice(0, 14000), cleanup: async () => { if (folder) await rm(folder, { recursive: true, force: true }); } };
+      return { images, quotes, notes: notes.join('\n').slice(0, 14000), cleanup: async () => { if (folder) await rm(folder, { recursive: true, force: true }); } };
     } catch (error) { if (folder) await rm(folder, { recursive: true, force: true }); throw error; }
   }
 }

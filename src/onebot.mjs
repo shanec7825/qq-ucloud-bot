@@ -42,12 +42,21 @@ export class OneBot {
       this.socket.send(JSON.stringify({ action, params, echo }));
     });
   }
-  async send(target, text) {
+  async send(target, text, { replyTo, mention } = {}) {
     // 使用 text 消息段，避免将课程文字解析成 CQ 指令。
     const chunks = String(text).match(/[\s\S]{1,1800}/gu) || [''];
-    for (const chunk of chunks) await this.call(target.group_id ? 'send_group_msg' : 'send_private_msg', {
-      ...target, message: [{ type: 'text', data: { text: chunk } }],
-    });
+    const sent = [];
+    for (const [index, chunk] of chunks.entries()) {
+      const prefix = [];
+      if (target.group_id && index === 0) {
+        if (/^-?\d{1,30}$/.test(String(replyTo))) prefix.push({ type: 'reply', data: { id: String(replyTo) } });
+        if (/^\d{5,15}$/.test(String(mention))) prefix.push({ type: 'at', data: { qq: String(mention) } });
+      }
+      sent.push(await this.call(target.group_id ? 'send_group_msg' : 'send_private_msg', {
+        ...target, message: [...prefix, { type: 'text', data: { text: (prefix.some(part => part.type === 'at') ? ' ' : '') + chunk } }],
+      }));
+    }
+    return sent;
   }
   close() { this.stopped = true; clearTimeout(this.retry); this.socket?.close(); }
 }

@@ -76,13 +76,13 @@
         </section>
         <section data-view="memory" hidden>
           <div class="page-heading"><div><h1>决定它记住什么</h1><p>管理长期记忆、群历史摘要和最近的对话上下文。</p></div></div>
-          <div class="panel"><div class="section-heading"><h2>记忆方式</h2></div><label class="check"><input type="checkbox" data-setting="memory.enabled">在回答中使用记忆</label><div class="two-columns"><label>最近上下文条数<input type="number" data-setting="memory.recentLimit" min="2" max="40" required></label><label>上下文保留时间（分钟）<input type="number" data-setting="memory.ttlMinutes" min="1" max="1440" required></label></div><p class="hint">关闭后不向模型提供已有笔记与历史摘要，也不记录新上下文。已保存内容仍可在下面管理。</p></div>
+          <div class="panel"><div class="section-heading"><h2>记忆方式</h2></div><label class="check"><input type="checkbox" data-setting="memory.enabled">在回答中使用记忆</label><div class="two-columns"><label>最近上下文条数<input type="number" data-setting="memory.recentLimit" min="2" max="40" required></label><label>上下文保留时间（分钟）<input type="number" data-setting="memory.ttlMinutes" min="1" max="1440" required></label></div><label class="check"><input type="checkbox" data-setting="memory.groupContext">@ 时结合近期群聊背景</label><label>群聊背景条数<input type="number" data-setting="memory.groupContextLimit" min="2" max="60" required></label><p class="hint">普通群消息只暂存在本机内存，最多 15 分钟；@ 时才发送有限文字给模型，不逐条分析、不下载普通消息的附件。关闭记忆会清空最近对话和背景；长期笔记与摘要仍可管理。</p></div>
         </section>
       </form>
       <div id="memory-tools" hidden>
         <div class="panel"><div class="section-heading"><h2>长期记忆</h2><p>由你添加和编辑，重启后依然保留。全局记忆会用于所有会话。</p></div><form id="note-form"><label>可见范围<select id="note-scope"></select></label><label>记忆内容<textarea id="note-text" rows="3" maxlength="2000" required placeholder="例如：回答教材问题时先给直观例子，再写正式定义。"></textarea></label><div class="action-row"><button class="secondary" type="submit" id="save-note">添加记忆</button><button type="button" id="cancel-note" hidden>取消编辑</button></div></form><div id="note-list"></div></div>
         <div class="panel"><div class="section-heading"><h2>群历史摘要</h2><p>可修订或清空当前摘要；原始导出文件仍只保存在本机。</p></div><label>群组<select id="digest-group"></select></label><label>摘要<textarea id="digest-text" rows="5" maxlength="1000"></textarea></label><p id="digest-meta" class="hint"></p><div class="action-row"><button id="save-digest" type="button">保存摘要</button><button id="clear-digest" type="button" class="danger-text">清空摘要</button></div></div>
-        <div class="panel"><div class="section-heading"><h2>最近对话</h2><p>只记录机器人实际回应的消息，不包括未 @ 的普通群消息；重启后自动清空。</p></div><div id="conversation-list"></div><button id="clear-conversations" type="button" class="danger-text">清空全部最近上下文</button></div>
+        <div class="panel"><div class="section-heading"><h2>最近对话与群聊背景</h2><p>按会话隔离，标明发言人；背景只保留简短文字和附件类型，重启后自动清空。</p></div><div id="conversation-list"></div><button id="clear-conversations" type="button" class="danger-text">清空全部最近上下文</button></div>
       </div>
     </main>
     <footer class="save-bar"><span id="save-state">已载入本机配置</span><div><button id="reload" type="button">重新载入</button><button class="primary" id="save-settings" type="submit" form="settings-form">保存并应用</button></div></footer>

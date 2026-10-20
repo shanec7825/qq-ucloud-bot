@@ -40,6 +40,12 @@ try {
   await page.locator('#save-settings').click(); await page.waitForFunction(() => document.querySelector('#save-state').textContent === '配置已保存');
   assert.equal(store.get().groups[0].id, '300000001'); assert.equal(store.get().groups[0].historyEnabled, false);
   await page.locator('[data-tab="memory"]').click(); await page.locator('#note-scope option').first().waitFor({ state: 'attached' });
+  await page.locator('[data-setting="memory.groupContext"]').uncheck();
+  await page.locator('[data-setting="memory.groupContextLimit"]').fill('12');
+  await page.locator('#save-settings').click(); await page.waitForFunction(() => document.querySelector('#save-state').textContent === '配置已保存');
+  assert.equal(store.get().memory.groupContext, false); assert.equal(store.get().memory.groupContextLimit, 12);
+  await page.reload(); await page.locator('#shell').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('[data-setting="memory.groupContext"]').isChecked(), false);
   await page.locator('#note-scope').selectOption('group:300000001');
   await page.locator('#note-text').fill('教材回答要标明文件和页序。'); await page.locator('#save-note').click();
   await page.locator('#note-list').getByText('教材回答要标明文件和页序。', { exact: true }).waitFor();

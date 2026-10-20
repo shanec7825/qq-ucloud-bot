@@ -17,7 +17,7 @@ const rules = {
   github: { enabled: bool, authMode: v => ['chatgpt', 'existing', 'token'].includes(v), defaultRepo: v => v === '' || /^[\w.-]+\/[\w.-]+$/.test(v) && v.length <= 200 },
   drive: { enabled: bool, authMode: v => ['chatgpt', 'existing', 'oauth'].includes(v), clientId: v => text(v, 250) && (v === '' || /^[\w.-]+\.apps\.googleusercontent\.com$/.test(v)), rootFolderId: v => v === '' || /^[\w-]{1,200}$/.test(v) },
   library: { root: v => text(v, 1000), sendToModel: bool },
-  memory: { enabled: bool, recentLimit: v => integer(v, 2, 40), ttlMinutes: v => integer(v, 1, 1440) },
+  memory: { enabled: bool, recentLimit: v => integer(v, 2, 40), ttlMinutes: v => integer(v, 1, 1440), groupContext: bool, groupContextLimit: v => integer(v, 2, 60) },
   history: { enabled: bool },
 };
 
@@ -33,7 +33,7 @@ export function defaults(env = {}) {
     github: { enabled: true, authMode: 'existing', defaultRepo: '' },
     drive: { enabled: true, authMode: 'existing', clientId: '', rootFolderId: '' },
     library: { root: env.SHARED_PDFS_ROOT || '', sendToModel: env.SHARED_DOCUMENTS_TO_MODEL === 'true' },
-    memory: { enabled: true, recentLimit: 16, ttlMinutes: 60 },
+    memory: { enabled: true, recentLimit: 16, ttlMinutes: 60, groupContext: true, groupContextLimit: 24 },
     history: { enabled: env.HISTORY_DIGEST_ENABLED === 'true' },
     groups: [...new Set(allowed)].map(id => ({ id, name: '', enabled: true, historyEnabled: history.includes(id) })),
   };
@@ -56,8 +56,9 @@ export class SettingsStore {
   constructor(file = new URL('../data/settings.json', import.meta.url), env = process.env) { this.file = file; this.env = env; this.queue = Promise.resolve(); }
   async load() {
     const saved = await readJSON(this.file, null);
-    this.value = validateSettings(saved || defaults(this.env));
-    if (!saved) await saveJSON(this.file, this.value);
+    const migrated = saved && saved.memory && saved.memory.groupContext === undefined && saved.memory.groupContextLimit === undefined ? { ...saved, memory: { ...saved.memory, groupContext: true, groupContextLimit: 24 } } : saved;
+    this.value = validateSettings(migrated || defaults(this.env));
+    if (!saved || migrated !== saved) await saveJSON(this.file, this.value);
     return this.get();
   }
   get() { return structuredClone(this.value); }

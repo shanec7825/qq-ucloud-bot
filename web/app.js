@@ -120,8 +120,10 @@ async function loadMemory() {
   if (memories.digests.some(g => g.groupId === selected)) select.value = selected; showDigest();
   const conversations = $('#conversation-list'); conversations.replaceChildren();
   for (const session of memories.conversations) {
-    const row = element('div', undefined, 'conversation'), header = element('header'); header.append(element('span', scopeName(session.scope) + ' · ' + session.entries.length + ' 条'), actionButton('清空', async () => { if (!confirm('清空这段最近上下文？')) return; await api('memory/conversations', 'DELETE', { scope: session.scope }); await loadMemory(); notice('最近上下文已清空。'); }, 'danger-text'));
-    const details = element('details'); details.append(element('summary', '查看最近上下文')); for (const entry of session.entries) details.append(element('p', entry.speaker + '：' + entry.text)); row.append(header, details); conversations.append(row);
+    const background = session.background || [];
+    const row = element('div', undefined, 'conversation'), header = element('header'); header.append(element('span', scopeName(session.scope) + ' · 对话 ' + session.entries.length + ' 条 · 背景 ' + background.length + ' 条'), actionButton('清空', async () => { if (!confirm('清空这段最近对话和群聊背景？')) return; await api('memory/conversations', 'DELETE', { scope: session.scope }); await loadMemory(); notice('最近上下文已清空。'); }, 'danger-text'));
+    const details = element('details'); details.append(element('summary', '查看最近对话')); for (const entry of session.entries) details.append(element('p', (entry.senderName ? entry.senderName + ' · ' : '') + entry.speaker + '：' + entry.text));
+    const ambient = element('details'); ambient.append(element('summary', '查看群聊背景')); for (const entry of background) ambient.append(element('p', (entry.senderName ? entry.senderName + ' · ' : '') + entry.speaker + '：' + entry.text)); row.append(header, details, ambient); conversations.append(row);
   }
   if (!memories.conversations.length) conversations.append(element('p', '当前没有最近上下文。', 'empty'));
 }

@@ -1,4 +1,5 @@
 import { readJSON } from './core.mjs';
+import { createHash } from 'node:crypto';
 import { segments, contentText } from './message-content.mjs';
 
 export function messageText(event) {
@@ -18,23 +19,60 @@ export function styleSamples(messages, selfId) {
 }
 
 export class ConversationMemory {
-  constructor(limit = 16) { this.limit = limit; this.ttl = 3600000; this.enabled = true; this.sessions = new Map(); this.version = 0; }
-  configure({ recentLimit, ttlMinutes, enabled }) { this.limit = recentLimit; this.ttl = ttlMinutes * 60000; this.enabled = enabled; for (const session of this.sessions.values()) session.entries = session.entries.slice(-this.limit); }
+  constructor(limit = 16) { this.limit = limit; this.ttl = 3600000; this.enabled = true; this.groupContext = true; this.groupContextLimit = 24; this.sessions = new Map(); this.version = 0; }
+  configure({ recentLimit, ttlMinutes, enabled, groupContext = true, groupContextLimit = 24 }) {
+    if (this.groupContext !== groupContext) this.version++;
+    this.limit = recentLimit; this.ttl = ttlMinutes * 60000; this.enabled = enabled; this.groupContext = groupContext; this.groupContextLimit = groupContextLimit;
+    if (!enabled) { this.clear('all'); return; }
+    for (const session of this.sessions.values()) { session.entries = session.entries.slice(-this.limit); session.background = groupContext ? session.background.slice(-groupContextLimit) : []; }
+  }
   key(event) { return event.message_type === 'group' ? `group:${event.group_id}` : `private:${event.user_id}`; }
+  describe(event, assistant = false) {
+    const id = String(event.user_id ?? event.sender?.user_id ?? 'unknown');
+    return { speaker: assistant || id === String(event.self_id) ? '机器人' : event.message_type === 'group' ? '群友-' + createHash('sha256').update(this.key(event) + ':' + id).digest('hex').slice(0, 10) : '用户',
+      senderName: assistant ? '' : String(event.sender?.card || event.sender?.nickname || '').replace(/[\r\n\u0000-\u001f]/g, ' ').slice(0, 60),
+      messageId: String(event.message_id ?? '').slice(0, 40), replyTo: String(event.inReplyTo ?? segments(event).find(part => part.type === 'reply')?.data?.id ?? '').slice(0, 40),
+      time: Number.isFinite(Number(event.time)) && Number(event.time) > 0 ? new Date(Math.min(Number(event.time) * 1000, 8640000000000000)).toISOString() : new Date().toISOString() };
+  }
+  session(event) {
+    const now = Date.now();
+    this.prune();
+    const key = this.key(event);
+    if (!this.sessions.has(key)) this.sessions.set(key, { entries: [], background: [], touched: now });
+    if (this.sessions.size > 100) this.sessions.delete(this.sessions.keys().next().value);
+    return this.sessions.get(key);
+  }
+  prune() {
+    const now = Date.now();
+    for (const [key, value] of this.sessions) {
+      if (now - value.touched > this.ttl) this.sessions.delete(key);
+      else { value.background = value.background.filter(row => now - row.observedAt <= Math.min(this.ttl, 15 * 60000)); value.entries = value.entries.filter(row => now - row.recordedAt <= this.ttl); }
+    }
+  }
+  observe(event) {
+    if (!this.enabled || !this.groupContext || event.message_type !== 'group') return;
+    const session = this.session(event), row = { ...this.describe(event), text: contentText(event).slice(0, 240), observedAt: Date.now() };
+    if (row.messageId && session.background.some(item => item.messageId === row.messageId)) return;
+    session.background.push(row); session.background = session.background.slice(-this.groupContextLimit); session.touched = Date.now();
+  }
+  background(event) {
+    if (!this.enabled || !this.groupContext) return [];
+    this.prune();
+    const session = this.sessions.get(this.key(event));
+    const rows = (session?.background || []).filter(row => row.messageId !== String(event.message_id ?? '')).slice(-this.groupContextLimit);
+    let size = 0; const result = [];
+    for (const row of rows.toReversed()) { size += JSON.stringify(row).length; if (size > 10000) break; result.unshift(row); }
+    return structuredClone(result);
+  }
   add(event, text, assistant = false) {
     if (!this.enabled) return;
     const key = this.key(event);
-    const existing = this.sessions.get(key);
-    const session = existing && Date.now() - existing.touched <= this.ttl ? existing : { aliases: new Map(), entries: [], touched: Date.now() };
-    const id = String(event.user_id);
-    if (!session.aliases.has(id)) session.aliases.set(id, '群友' + (session.aliases.size + 1));
-    session.entries.push({ speaker: assistant ? '机器人' : event.message_type === 'group' ? session.aliases.get(id) : '用户', text: String(text).slice(0, 1500) });
+    const session = this.session(event);
+    session.entries.push({ ...this.describe(event, assistant), text: String(text).slice(0, 1500), recordedAt: Date.now() });
     session.entries = session.entries.slice(-this.limit); session.touched = Date.now(); this.sessions.set(key, session);
-    for (const [sessionKey, value] of this.sessions) if (Date.now() - value.touched > this.ttl) this.sessions.delete(sessionKey);
-    if (this.sessions.size > 100) this.sessions.delete(this.sessions.keys().next().value);
   }
-  get(event) { const session = this.sessions.get(this.key(event)); return this.enabled && session && Date.now() - session.touched <= this.ttl ? session.entries : []; }
-  list() { return [...this.sessions].filter(([, session]) => Date.now() - session.touched <= this.ttl).map(([scope, session]) => ({ scope, touched: session.touched, entries: session.entries })); }
+  get(event) { this.prune(); return this.enabled ? this.sessions.get(this.key(event))?.entries || [] : []; }
+  list() { this.prune(); return [...this.sessions].map(([scope, session]) => ({ scope, touched: session.touched, entries: session.entries, background: session.background })); }
   clear(scope) { this.version++; if (scope === 'all') this.sessions.clear(); else this.sessions.delete(scope); }
 }
 

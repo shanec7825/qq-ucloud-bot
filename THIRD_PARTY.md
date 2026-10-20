@@ -10,6 +10,10 @@ Source: [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ), Copyright © 20
 
 The school CAS / UCloud request flow was checked against [byrdocs/bupt-auth](https://github.com/byrdocs/bupt-auth) (MIT). This project's implementation is separate; it does not bundle that project's code or any CAPTCHA OCR service.
 
+## Group conversation design reference
+
+The group background window, sender identification and quote/mention reply design were checked against the official [AstrBot configuration documentation](https://docs.astrbot.app/en/dev/astrbot-config.html). The implementation here is independent JavaScript; no AstrBot source code is bundled. Prompt structure was checked against [OpenAI's prompt engineering guide](https://developers.openai.com/api/docs/guides/prompt-engineering).
+
 ## Runtime dependencies
 
 npm dependencies are listed in `package.json` and locked in `package-lock.json`; their own licenses apply. Optional NapCat, GitHub CLI, rclone, FFmpeg, Whisper packages and model files are installed separately under the ignored `tools/` directory. They are not included in this source repository.

@@ -25,7 +25,7 @@ export class BotRuntime {
     this.google = new GoogleDrive({ settings: () => store.get(), vault });
     this.connectors = new ChatGPTConnectorClient(); this.native = new ChatGPTResources(this.connectors);
     this.history = new HistoryDigest({ root: new URL('history/', root), ai: (q, c) => this.ai(q, c) });
-    this.proxy = { call: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接，请配置 OneBot。'); return this.bot.call(...args); }, send: (...args) => this.bot?.send(...args) };
+    this.proxy = { call: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接，请配置 OneBot。'); return this.bot.call(...args); }, send: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接。'); return this.bot.send(...args); } };
     this.media = new MessageMedia(this.proxy);
     this.handler = createMessageHandler({ bot: this.proxy, memory: this.memory, getDependencies: () => this.dependencies() });
   }
@@ -78,6 +78,7 @@ export class BotRuntime {
   }
   apply() {
     const config = this.store.get(); this.memory.configure(config.memory);
+    for (const scope of this.memory.sessions.keys()) if (scope.startsWith('group:') && !config.groups.some(group => group.enabled && 'group:' + group.id === scope)) this.memory.clear(scope);
     const appSignature = JSON.stringify([config.drive.authMode, config.drive.rootFolderId, config.drive.enabled, config.github.authMode, config.github.enabled, config.bot.ownerQQ, config.memory.enabled]);
     if (appSignature !== this.appSignature) { this.appSignature = appSignature; this.native.selections.clear(); }
     if (config.drive.enabled && config.drive.authMode === 'chatgpt' || config.github.enabled && config.github.authMode === 'chatgpt') this.connectors.ready().catch(() => {});
@@ -108,6 +109,7 @@ export class BotRuntime {
     if (this.stopped || this.ticking) return;
     this.ticking = true;
     try {
+      if (!this.lastMemoryPrune || Date.now() - this.lastMemoryPrune >= 60000) { this.memory.prune(); this.lastMemoryPrune = Date.now(); }
       const config = this.store.get();
       if (config.school.enabled && (!this.lastPoll || Date.now() - this.lastPoll >= config.school.pollSeconds * 1000)) {
         this.lastPoll = Date.now();
