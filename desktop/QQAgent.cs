@@ -16,8 +16,8 @@ using Microsoft.Web.WebView2.WinForms;
 
 [assembly: AssemblyTitle("QQ Agent")]
 [assembly: AssemblyDescription("QQ Agent Windows desktop launcher")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
 
 namespace QQAgentDesktop {
     internal static class Program {
@@ -142,7 +142,7 @@ namespace QQAgentDesktop {
                 if (entry.FullName.StartsWith("data/") || entry.FullName.StartsWith("tools/") || Path.GetFileName(path).StartsWith(".env")) throw new Exception("安装包包含不允许覆盖的配置目录。");
                 Directory.CreateDirectory(Path.GetDirectoryName(path)); entry.ExtractToFile(path, true);
             }
-            File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), "1.0.0");
+            File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), "1.0.1");
         }
         void SaveWorkspace() { if (!smoke) File.WriteAllText(Path.Combine(Program.AppData, "desktop.json"), Program.Json.Serialize(new { workspace = workspace })); }
         async Task SelectWorkspace() { using (var dialog = new FolderBrowserDialog { Description = "选择现有 QQ Agent 项目目录，配置和授权会继续使用", SelectedPath = workspace }) {
@@ -164,7 +164,7 @@ namespace QQAgentDesktop {
             progress.Text = "正在切换 QQ，请等待新的登录页面…"; await Service("switch-account", 150000); await OpenPage("/webui/qq_login");
         }
         async Task RefreshStatus() {
-            try { var status = await Service("status", 25000); status["workspace"] = workspace; status["version"] = "1.0.0";
+            try { var status = await Service("status", 25000); status["workspace"] = workspace; status["version"] = "1.0.1";
                 if (home && browser.CoreWebView2 != null) await browser.CoreWebView2.ExecuteScriptAsync("window.renderStatus&&window.renderStatus(" + Program.Json.Serialize(status) + ")");
                 progress.Text = GetBool(status, "webuiAvailable") ? GetBool(status, "qqLoggedIn") ? "QQ 已登录 · 关闭窗口收起到托盘" : "QQ 等待登录 · 点击左侧“QQ 登录”" : "后台未运行 · 首次使用先准备组件，再启动机器人";
             } catch (Exception error) { progress.Text = error.Message; }
@@ -209,6 +209,8 @@ namespace QQAgentDesktop {
             await OpenPage("/webui/qq_login"); await Task.Delay(1500);
             HideToTray(); if (Visible || !tray.Visible) throw new Exception("托盘收起失败。"); RestoreWindow(); if (!Visible) throw new Exception("托盘恢复失败。");
             await NavigateHome(); await Task.Delay(300); await RefreshStatus();
+            string shown = await browser.CoreWebView2.ExecuteScriptAsync("document.querySelector('#qq').textContent");
+            if (GetBool(status, "qqLoggedIn") && shown != Program.Json.Serialize("已登录")) throw new Exception("首页 QQ 登录状态与本机真实状态不一致。");
             using (var stream = File.Create(Path.Combine(output, "home.png"))) await browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
             WriteSmoke(true, "Native WebView2, authenticated plugin page, QQ login navigation and tray restore verified. No account switch, QQ message or model request."); quitting = true; Close();
         }

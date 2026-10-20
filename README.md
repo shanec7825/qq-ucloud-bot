@@ -8,8 +8,8 @@
 
 从 [GitHub Releases](https://github.com/shanec7825/qq-ucloud-bot/releases/latest) 下载 Windows x64 发行包：
 
-- **推荐安装包**：`QQ-Agent-Setup-1.0.0-x64.exe`，安装后创建桌面和开始菜单入口。
-- **便携版**：`QQ-Agent-1.0.0-win-x64.zip`，完整解压后运行 `QQ-Agent/QQAgent.exe`；不要只复制 exe。
+- **推荐安装包**：`QQ-Agent-Setup-1.0.1-x64.exe`，安装后创建桌面和开始菜单入口。
+- **便携版**：`QQ-Agent-1.0.1-win-x64.zip`，完整解压后运行 `QQ-Agent/QQAgent.exe`；不要只复制 exe。
 - **校验文件**：`SHA256SUMS.txt`。
 
 需要 Windows 10/11 x64、.NET Framework 4.8 和 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。安装包内含 Node 24 LTS、WebView2 SDK 运行库与干净的机器人后端，不含 QQ 登录缓存、账号、密码、学校会话、云盘凭据或个人配置。当前发行版未做发布者代码签名。
@@ -70,6 +70,6 @@ npm.cmd run desktop:prepare
 npm.cmd run desktop:build
 ```
 
-构建需 Windows x64，使用 Windows 自带 C# 编译器。准备脚本从微软 NuGet、Node 和 Inno Setup 官方源获取已锁定组件并校验 SHA512/SHA256。输出位于 `release/1.0.0/`，包括安装包、便携包和校验清单；产物不会混入 Git 源码。
+构建需 Windows x64，使用 Windows 自带 C# 编译器。准备脚本从微软 NuGet、Node 和 Inno Setup 官方源获取已锁定组件并校验 SHA512/SHA256。输出位于 `release/1.0.1/`，包括安装包、便携包和校验清单；产物不会混入 Git 源码。
 
 详细设置、学校登录和原有命令行部署见 [配置手册](docs/CONFIGURATION.md)。第三方组件与许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。

@@ -31,11 +31,26 @@ test('桌面首页状态不包含管理密码或浏览器登录凭据；只调�
   const root = await mkdtemp(join(tmpdir(), 'qq-agent-status-')), calls = [];
   try {
     await mkdir(join(root, 'tools/napcat/napcat/config'), { recursive: true }); await writeFile(join(root, 'tools/napcat/napcat/config/webui.json'), JSON.stringify({ token: 'PRIVATE_PASSWORD' }));
-    const service = new DesktopService(root, { fetcher: async (url, options) => {
+    const service = new DesktopService(root, { sessionCodec: { protect: async value => value, unprotect: async value => value }, fetcher: async (url, options) => {
       assert.ok(url.startsWith('http://127.0.0.1:6099/api/')); calls.push({ url, body: options.body });
       return { ok: true, json: async () => ({ code: 0, data: url.endsWith('auth/login') ? { Credential: 'PRIVATE_CREDENTIAL' } : { isLogin: true, loginPhase: 'ready' } }) };
     } });
     const state = await service.status(); assert.equal(state.qqLoggedIn, true); assert.equal(state.webuiAvailable, true); assert.equal(calls.length, 2);
     assert.ok(!JSON.stringify(state).includes('PRIVATE_')); assert.ok(!calls[0].body.includes('PRIVATE_PASSWORD'));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('桌面刷新跨进程实例复用加密会话，失效后重新认证，不反复触发 NapCat 登录限流', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'qq-agent-session-')); let logins = 0, revoked = false;
+  const sessionCodec = { protect: async value => Buffer.from(value).toString('base64'), unprotect: async value => Buffer.from(value, 'base64').toString() };
+  const fetcher = async url => {
+    if (url.endsWith('auth/login')) { logins++; revoked = false; return { ok: true, json: async () => ({ code: 0, data: { Credential: 'PRIVATE_SESSION' } }) }; }
+    return { ok: !revoked, json: async () => ({ code: revoked ? -1 : 0, data: null }) };
+  };
+  try {
+    await mkdir(join(root, 'tools/napcat/napcat/config'), { recursive: true }); await writeFile(join(root, 'tools/napcat/napcat/config/webui.json'), JSON.stringify({ token: 'PRIVATE_PASSWORD' }));
+    for (let i = 0; i < 15; i++) assert.equal(await new DesktopService(root, { fetcher, sessionCodec }).session(), 'PRIVATE_SESSION');
+    assert.equal(logins, 1); revoked = true;
+    assert.equal(await new DesktopService(root, { fetcher, sessionCodec }).session(), 'PRIVATE_SESSION'); assert.equal(logins, 2);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

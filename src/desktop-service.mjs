@@ -10,6 +10,7 @@ import { SecretVault } from './secret-vault.mjs';
 import { AdminBridge } from '../napcat-plugin/bridge.mjs';
 import { ensureEngine } from '../napcat-plugin/engine.mjs';
 import { PLUGIN_MODULES } from '../napcat-plugin/catalog.mjs';
+import { protectSchoolSecret, unprotectSchoolSecret } from './school-secret.mjs';
 
 const exec = promisify(execFile), origin = 'http://127.0.0.1:6099';
 export function validateWorkspacePath(value) {
@@ -36,15 +37,24 @@ const writeJSON = (file, value) => writeFile(file, JSON.stringify(value, null, 2
 function childEnv() { return Object.fromEntries(Object.entries(process.env).filter(([name]) => !/TOKEN|SECRET|PASSWORD|API_KEY|OPENAI_(?:BASE|IDENTITY|FEDERATION)/i.test(name))); }
 
 export class DesktopService {
-  constructor(root, { fetcher = fetch } = {}) { this.root = root; this.fetch = fetcher; this.webui = join(root, 'tools/napcat/napcat/config/webui.json'); }
+  constructor(root, { fetcher = fetch, sessionCodec = { protect: protectSchoolSecret, unprotect: unprotectSchoolSecret } } = {}) { this.root = root; this.fetch = fetcher; this.sessionCodec = sessionCodec; this.webui = join(root, 'tools/napcat/napcat/config/webui.json'); }
   async native(path, body, credential) {
     const response = await this.fetch(origin + '/api/' + path, { method: body === undefined ? 'GET' : 'POST', headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(credential ? { authorization: 'Bearer ' + credential } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: AbortSignal.timeout(12000) });
     const value = await response.json(); if (!response.ok || value.code !== 0) throw new Error('NapCat 操作未完成：' + path); return value.data;
   }
   async session() {
     const config = await json(this.webui), hash = createHash('sha256').update(config.token + '.napcat').digest('hex');
+    const file = join(this.root, 'data/desktop-session.enc.json');
+    try {
+      const saved = await json(file), cache = JSON.parse(await this.sessionCodec.unprotect(saved.ciphertext));
+      if (cache.hash === hash && cache.expires > Date.now() && typeof cache.credential === 'string') {
+        await this.native('auth/check', {}, cache.credential); return cache.credential;
+      }
+    } catch { /* Missing, expired or revoked local sessions require one fresh login. */ }
     const result = await this.native('auth/login', { hash });
-    if (typeof result.Credential !== 'string') throw new Error('NapCat 登录响应无效。'); return result.Credential;
+    if (typeof result.Credential !== 'string') throw new Error('NapCat 登录响应无效。');
+    const ciphertext = await this.sessionCodec.protect(JSON.stringify({ hash, credential: result.Credential, expires: Date.now() + 50 * 60000 }));
+    await mkdir(join(this.root, 'data'), { recursive: true }); await writeJSON(file, { ciphertext }); return result.Credential;
   }
   async status() {
     const state = { workspace: this.root, napcatInstalled: await exists(join(this.root, 'tools/napcat/node.exe')), webuiAvailable: false, qqLoggedIn: false, botConnected: false };
