@@ -15,6 +15,7 @@ export function createMessageHandler({ bot, groups, memory, getDependencies, ...
       seen.add(key); if (seen.size > 1000) seen.delete(seen.values().next().value);
     }
     // Passive messages stay in a bounded RAM buffer. No media, tools or model calls.
+    current().members?.observe(event);
     memory.observe(event);
     if (!text) return;
     const groupBackground = memory.background(event), capturedVersion = memory.version;
@@ -27,7 +28,11 @@ export function createMessageHandler({ bot, groups, memory, getDependencies, ...
       const memoryVersion = memory.version;
       memory.add(event, text);
       let response;
-      try { response = await routeNatural(text, event, { ...active, memory, groupBackground: memory.version === capturedVersion ? groupBackground : [] }); }
+      try {
+        await active.members?.prepare(event);
+        if (!incomingText(event, current().groups) || active.transportVersion !== current().transportVersion) return;
+        response = await routeNatural(text, event, { ...active, memory, groupBackground: memory.version === capturedVersion ? groupBackground : [] });
+      }
       catch (error) {
         response = event.message_type !== 'private' || String(event.user_id) !== active.owner ? '我这次没连上，稍后再问我一下。' :
           error instanceof TypeError || error.name === 'TimeoutError' ? '网络请求失败或超时，请检查服务连接。' : error.message;

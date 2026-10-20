@@ -29,14 +29,17 @@ export async function routeNatural(text, event, deps) {
       '可查的教材课件：\n' + references.available.map(file => file.name).join('\n');
   }
   const persona = event.message_type === 'group' ? await deps.persona(String(event.group_id)) : { voice: ['自然、简短地交流；需要解释时把问题讲清楚。'] };
-  const media = deps.media ? await deps.media.prepare(event, { describe: message => deps.memory?.describe?.(message) || {} }) : null;
+  const describe = message => deps.members?.describe(message, deps.memory) || deps.memory?.describe?.(message) || {};
+  const groupDirectory = deps.members?.context(event, question, deps.memory);
+  const media = deps.media ? await deps.media.prepare(event, { describe }) : null;
   try {
   const history = event.message_type === 'group' && deps.history ? await deps.history.context(String(event.group_id)) : null;
   const context = {
     mode: 'conversation', audience: event.message_type === 'group' ? 'QQ群' : isOwner ? '主人私聊' : '普通私聊',
     persona: persona.voice, conversation: deps.memory?.get(event) || [],
-    currentMessage: { ...(deps.memory?.describe?.(event) || {}), text: question,
-      mentions: segments(event).filter(part => part.type === 'at' && String(part.data?.qq) !== String(event.self_id)).slice(0, 10).map(part => part.data?.qq === 'all' ? { speaker: '全体成员' } : deps.memory?.describe?.({ ...event, user_id: part.data?.qq, sender: {} }) || {}) },
+    currentMessage: { ...describe(event), text: question,
+      mentions: segments(event).filter(part => part.type === 'at' && String(part.data?.qq) !== String(event.self_id)).slice(0, 10).map(part => part.data?.qq === 'all' ? { speaker: '全体成员' } : describe({ ...event, user_id: part.data?.qq, sender: {} })) },
+    ...(groupDirectory ? { groupDirectory } : {}),
     ...(event.message_type === 'group' ? { groupBackground: deps.memory?.enabled && deps.memory?.groupContext ? deps.groupBackground || [] : [] } : {}),
     assignments: await deps.catalog.list(), library: references,
     ...(deps.notes ? { savedMemories: await deps.notes.context(event) } : {}),

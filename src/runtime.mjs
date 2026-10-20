@@ -14,6 +14,7 @@ import { HistoryDigest } from './history-digest.mjs';
 import { ManagedMemory } from './managed-memory.mjs';
 import { modelEnv } from './settings.mjs';
 import { ChatGPTConnectorClient, ChatGPTResources } from './chatgpt-connectors.mjs';
+import { GroupMembers } from './group-members.mjs';
 
 const project = new URL('../', import.meta.url);
 export class BotRuntime {
@@ -27,6 +28,7 @@ export class BotRuntime {
     this.history = new HistoryDigest({ root: new URL('history/', root), ai: (q, c) => this.ai(q, c) });
     this.proxy = { call: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接，请配置 OneBot。'); return this.bot.call(...args); }, send: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接。'); return this.bot.send(...args); } };
     this.media = new MessageMedia(this.proxy);
+    this.members = new GroupMembers(this.proxy, () => this.store.get().groups.filter(group => group.enabled).map(group => group.id));
     this.handler = createMessageHandler({ bot: this.proxy, memory: this.memory, getDependencies: () => this.dependencies() });
   }
   env(config = this.store.get()) {
@@ -70,7 +72,7 @@ export class BotRuntime {
       list: async () => 'UCloud 未启用。', detail: async () => 'UCloud 未启用。', upcomingTasks: async () => [], books: () => this.catalog.books(),
     };
     return { groups: enabled.map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
-      resources: this.resources(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: this.media,
+      resources: this.resources(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: this.media, members: this.members,
       notes: config.memory.enabled ? this.notes : null,
       history: config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
       persona: loadPersona, shareDocumentsWithModel: config.library.sendToModel, transportVersion: this.transportVersion,
@@ -78,6 +80,7 @@ export class BotRuntime {
   }
   apply() {
     const config = this.store.get(); this.memory.configure(config.memory);
+    this.members.retain();
     for (const scope of this.memory.sessions.keys()) if (scope.startsWith('group:') && !config.groups.some(group => group.enabled && 'group:' + group.id === scope)) this.memory.clear(scope);
     const appSignature = JSON.stringify([config.drive.authMode, config.drive.rootFolderId, config.drive.enabled, config.github.authMode, config.github.enabled, config.bot.ownerQQ, config.memory.enabled]);
     if (appSignature !== this.appSignature) { this.appSignature = appSignature; this.native.selections.clear(); }
@@ -86,6 +89,7 @@ export class BotRuntime {
     const token = this.vault.get('onebotToken') || '', signature = JSON.stringify([config.qq.url, token, !!config.bot.ownerQQ]);
     if (signature !== this.transportSignature) {
       this.transportSignature = signature; this.transportVersion++; this.bot?.close(); this.bot = null;
+      this.members.clear();
       if (token && config.bot.ownerQQ) { this.bot = this.botFactory(config.qq.url, token, this.handler); this.bot.connect(); }
     }
   }
