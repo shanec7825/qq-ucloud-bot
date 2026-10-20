@@ -65,6 +65,9 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (route === '/api/session' && req.method === 'GET') { json({ csrf: session.csrf }); return; }
       if (route === '/api/logout' && req.method === 'POST') { sessions.delete(token); json({ ok: true }, 200, { 'set-cookie': 'slyra_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' }); return; }
       if (route === '/api/state' && req.method === 'GET') { json({ settings: store.get(), secrets: vault.flags(), status: await runtime.status(), googleRedirectURI: origin + '/oauth/google/callback' }); return; }
+      if (route === '/api/runtime/stop' && req.method === 'POST') {
+        runtime.stop(); res.once('finish', () => { server.close(); server.closeAllConnections(); }); json({ ok: true }); return;
+      }
       if (route === '/api/settings' && req.method === 'PUT') {
         const input = await body(req), old = store.get();
         const next = await store.update(input.settings, input.revision);

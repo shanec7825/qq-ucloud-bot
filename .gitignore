@@ -2,6 +2,7 @@
 data/
 node_modules/
 tools/
+release/
 *.log
 qrcode.png
 .env.*

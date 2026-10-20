@@ -1,0 +1,21 @@
+import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { unzipSync } from 'fflate';
+import { SecretVault } from '../src/secret-vault.mjs';
+const root = fileURLToPath(new URL('../', import.meta.url)), pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+const folder = join(root, 'release', pkg.version), backend = unzipSync(await readFile(join(folder, 'win-x64/backend.zip'))), paths = Object.keys(backend);
+if (paths.some(path => path.startsWith('data/') || path.startsWith('tools/') || /(?:^|\/)\.env(?:\.|$)/.test(path))) throw new Error('发行包包含禁止发布的个人目录。');
+const markers = new Set(); const collect = value => { if (typeof value === 'string' && value.length >= 12) markers.add(value); else if (value && typeof value === 'object') Object.values(value).forEach(collect); };
+try {
+  process.loadEnvFile(join(root, '.env')); const vault = new SecretVault(); await vault.load();
+  for (const name of ['onebotToken', 'openaiKey', 'githubToken', 'googleClientSecret', 'googleTokens']) collect(vault.get(name));
+} catch (error) { if (error.code !== 'ENOENT') throw new Error('无法完成本机授权指纹检查，未通过发行审核。'); }
+for (const marker of markers) {
+  const needle = Buffer.from(marker), wide = Buffer.from(marker, 'utf16le');
+  for (const [path, bytes] of Object.entries(backend)) if (Buffer.from(bytes).includes(needle) || Buffer.from(bytes).includes(wide)) throw new Error('发行资源含本机凭据，拒绝发布：' + path);
+}
+const portableName = 'QQ-Agent-' + pkg.version + '-win-x64.zip', portable = unzipSync(await readFile(join(folder, portableName)));
+if (!portable['QQ-Agent/QQAgent.exe'] || !portable['QQ-Agent/runtime/node.exe'] || !portable['QQ-Agent/WebView2Loader.dll']) throw new Error('便携包缺少运行文件。');
+const report = { passed: true, version: pkg.version, backendFiles: paths.length, noPersonalDirectories: true, noLocalCredentialFingerprints: true, portableStructureValid: true, excluded: ['.env', 'data/', 'tools/', 'QQ cache', 'school sessions', 'cloud authorization'] };
+await writeFile(join(folder, 'release-audit.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));

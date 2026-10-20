@@ -1,0 +1,71 @@
+name: Windows desktop release
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - desktop/**
+      - scripts/build-windows.mjs
+      - scripts/prepare-desktop.mjs
+      - scripts/audit-windows.mjs
+      - .github/workflows/release-windows.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run desktop:prepare
+      - run: npm run desktop:build
+      - run: node scripts/audit-windows.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-desktop
+          path: |
+            release/*/*.exe
+            release/*/*.zip
+            release/*/SHA256SUMS.txt
+            release/*/release-audit.json
+          compression-level: 0
+          retention-days: 7
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-desktop
+          path: artifacts
+      - name: Publish immutable version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving its assets unchanged."
+            exit 0
+          fi
+          mapfile -d '' ASSETS < <(find artifacts -type f -print0)
+          gh release create "$TAG" "${ASSETS[@]}" --target "$RELEASE_COMMIT" --title "QQ Agent $VERSION for Windows" --notes-file "docs/releases/$TAG.md"

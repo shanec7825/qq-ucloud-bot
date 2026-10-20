@@ -20,4 +20,6 @@ The integration uses NapCat's authenticated plugin router, native HTML config sc
 
 ## Runtime dependencies
 
+The Windows desktop app uses Microsoft WebView2 WinForms/Core SDK 1.0.4258.31 and the separately installed Evergreen WebView2 Runtime. The SDK LICENSE and NOTICE are copied into Windows packages. The application targets .NET Framework 4.8, supplied by Windows or Microsoft separately. Node 24.22.0 is bundled from the official Node distribution with its LICENSE. Windows installers are compiled with Inno Setup; the compiler is not bundled. NapCat and optional Codex are downloaded from their official GitHub releases with pinned SHA256 validation, rather than redistributing the developer's installed tools or QQ/Tencent caches. See `desktop/versions.json` for versions and digests.
+
 npm dependencies are listed in `package.json` and locked in `package-lock.json`; their own licenses apply. Optional NapCat, GitHub CLI, rclone, FFmpeg, Whisper packages and model files are installed separately under the ignored `tools/` directory. They are not included in this source repository.

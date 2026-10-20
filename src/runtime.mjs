@@ -84,7 +84,7 @@ export class BotRuntime {
     const catalog = config.school.enabled ? this.catalog : {
       list: async () => 'UCloud 未启用。', detail: async () => 'UCloud 未启用。', upcomingTasks: async () => [], books: () => this.catalog.books(),
     };
-    return { enabled: moduleActive(this.root, 'core'), capabilities: JSON.stringify([config.github.enabled, config.drive.enabled, config.school.enabled]), groups: enabled.filter(g => !config.monitor.groups.includes(g.id)).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
+    return { enabled: !this.stopped && moduleActive(this.root, 'core'), capabilities: JSON.stringify([config.github.enabled, config.drive.enabled, config.school.enabled]), groups: enabled.filter(g => !config.monitor.groups.includes(g.id)).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
       resources: this.resources(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: this.media, members: this.members,
       notes: config.memory.enabled ? this.notes : null, monitor: this.monitor,
       history: config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,

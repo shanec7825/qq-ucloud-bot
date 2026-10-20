@@ -51,9 +51,9 @@ test('bridge logs in server-side, preserves save conflicts and hides bootstrap c
   const folder = await mkdtemp(join(tmpdir(), 'slyra-napcat-test-')), root = pathToFileURL(folder + '/'); let admin;
   try {
     const store = new SettingsStore(new URL('settings.json', root), {}); await store.load();
-    let monitorRuns = 0;
+    let monitorRuns = 0, stopped = false;
     const runtime = { status: async () => ({ qq: { connected: false } }), apply() {}, checks: {}, handler: { isBusy: () => false },
-      monitor: { status: async () => ({ running: false, reports: [], state: {} }), run: async () => { monitorRuns++; return { status: 'disabled' }; } } };
+      monitor: { status: async () => ({ running: false, reports: [], state: {} }), run: async () => { monitorRuns++; return { status: 'disabled' }; } }, stop() { stopped = true; } };
     admin = await startAdmin({ store, runtime, vault: { flags: () => ({}) }, root, port: 0 });
     await mkdir(join(folder, 'data'));
     await writeFile(join(folder, 'data/admin-info.json'), JSON.stringify({ origin: admin.origin }));
@@ -71,8 +71,10 @@ test('bridge logs in server-side, preserves save conflicts and hides bootstrap c
     assert.equal((await bridge.request('GET', 'http://evil.test')).status, 400);
     await writeFile(new URL('napcat-ui.json', root), JSON.stringify({ origin: 'http://127.0.0.1:6099' }));
     await admin.close(); admin = await startAdmin({ store, runtime, vault: { flags: () => ({}) }, root, port: 0 });
+    await writeFile(join(folder, 'data/admin-info.json'), JSON.stringify({ origin: admin.origin }));
     const redirect = await fetch(admin.origin + '/', { redirect: 'manual' });
     assert.equal(redirect.status, 303); assert.equal(redirect.headers.get('location'), 'http://127.0.0.1:6099/webui/plugins#');
+    assert.equal((await new AdminBridge(folder).request('POST', 'runtime/stop', {})).status, 200); assert.equal(stopped, true);
   } finally { await admin?.close(); await rm(folder, { recursive: true, force: true }); }
 });
 
