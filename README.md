@@ -1,32 +1,44 @@
-# slyra · 北邮教学云 QQ 机器人
+# QQ Agent · 模块化 QQ AI 机器人
 
 可通过本机网页配置的 QQ AI 机器人：自定义名字和系统提示词、管理群组与记忆，连接 GitHub、Google Drive，并可选查询北京邮电大学 UCloud 最近截止的作业和指定教材目录。通过 NapCat / OneBot 11 登录独立机器人 QQ；默认使用官方 Codex CLI 的 ChatGPT 登录，模型为 `gpt-6-luna`，也保留 OpenAI 兼容 API 接口。
 
-## NapCat 内统一配置（0.8）
+## NapCat 插件内配置（0.9）
 
 ```powershell
 npm.cmd ci
-# 默认安装到 tools/napcat/napcat/plugins/napcat-plugin-slyra。
+# 安装机器人核心与可选功能模块，机器人昵称可以自行设置。
 npm.cmd run napcat:install -- --trust-local-plugin
 # 在另一个终端打开 NapCat。
 npm.cmd run admin:open
 ```
 
-统一入口为 **NapCat → 扩展页面**，默认地址 `http://127.0.0.1:6099/webui/extension`，提供 **slyra 设置** 与 **群通知整理** 两个插件页。使用 NapCat 自身的登录和界面，不需要第二份管理密码；下表所有配置均可在 NapCat 内操作。QQ 登录、网络和插件管理仍使用 NapCat 原有页面。启用任一插件会自动启动或复用一个本机 Node 后台，共用同一份配置；网页关闭不会停止机器人。停用插件页面不会结束已运行的共享后台，功能开关在页面中控制。后台启动失败可检查 `data/napcat-engine.log`，或手动运行 `npm start`；无需同时重复启动。
+统一入口为 **NapCat → 插件管理 → 对应卡片的“插件配置”齿轮**，默认地址 `http://127.0.0.1:6099/webui/plugins`。安装五个通用模块：**QQ Agent · 机器人核心、GitHub、Google Drive、UCloud · 北邮教学云、群通知整理**。插件名字与机器人昵称分开，个人昵称不会成为软件品牌。不再为这些模块注册独立“扩展页面”；配置直接嵌在 NapCat 原生插件配置窗口。页面内“保存并应用”立即生效，之后关闭窗口即可，外层“保存”不写第二份配置。
 
-安装脚本复用本项目现有设置页，嵌入时跟随 NapCat 主题、使用圆角半透明面板，隐藏独立品牌和退出入口。插件的所有配置 API 均通过 NapCat 鉴权路由注册，未登录不能读取设置或记忆。内部 6100 服务只监听本机，管理密钥和内部 Cookie 保留在插件服务端；安装后旧 6100 网页自动转到 NapCat。Google 独立 OAuth 回调仍由内部服务完成，成功后回到 NapCat。
+任一模块会自动启动或复用一个本机 Node 后台，不需要重复启动。停用 GitHub / Drive / UCloud / 通知整理插件会停止对应能力，但保留配置与授权；停用核心会停止普通聊天与群历史背景归纳，独立 UCloud / 通知后台仍可按自身设置运行。共享后台不会因为关闭一个设置窗口而退出。启动失败可检查 `data/napcat-engine.log`，或手动运行 `npm start`。
 
-当前部分 NapCat 构建只加载硬编码的官方插件。`--trust-local-plugin` 仅为 `napcat-plugin-slyra` 与 `napcat-plugin-slyra-monitor` 增加精确的本机例外，仍检查敏感词并保留其他非官方插件限制，修改前备份到忽略的 `data/napcat.before-slyra-trust.mjs`。不修改其他插件代码；版本模式不匹配时停止，NapCat 升级后可能需要重新安装。手动把插件放到其他 NapCat 时，可传入插件完整目录：`node scripts/install-napcat.mjs "D:/NapCat/plugins/napcat-plugin-slyra" --trust-local-plugin`，然后重启 NapCat 并启用这两个插件。脚本不会设定固定默认密码，也不会修改 QQ 账号密码或第三方授权。
+安装脚本复用本项目设置组件，各模块只展示自己的设置，跟随 NapCat 主题，不需要第二份管理密码。所有配置 API 均通过 NapCat 鉴权路由注册，未登录不能读取设置或记忆。内部 6100 服务只监听本机，管理密钥和内部 Cookie 留在插件服务端；旧 6100 网页自动转到 NapCat 插件管理。Google 独立 OAuth 回调仍由内部服务完成。
+
+当前部分 NapCat 构建只加载硬编码的官方插件。`--trust-local-plugin` 仅为本项目五个固定模块 ID 增加本机例外，仍检查敏感词并保留其他非官方插件限制；修改前备份到忽略的 `data/napcat.before-slyra-trust.mjs`。遇到未知版本或其他自定义信任项会停止。旧版两个 slyra 插件目录会移动到 `data/plugin-backups/`，用户配置不迁移、不清空。NapCat 升级后可能需要重新安装。其他安装目录示例：`node scripts/install-napcat.mjs "D:/NapCat/plugins/napcat-plugin-qq-agent" --trust-local-plugin`。然后重启 NapCat、启用需要的模块。脚本不设固定默认密码，不修改 QQ 密码或第三方授权。
 
 未安装 NapCat 集成时，保留原本的 6100 本机独立管理页和随机管理密钥以兼容单独部署；实际启用的统一入口由忽略的 `data/napcat-ui.json` 指定。所有配置仍只保存一份 `data/settings.json`，不是两个互相覆盖的配置库。
 
-| 页面 | 可配置内容 |
+| 插件 | 可配置内容 |
 | --- | --- |
-| 机器人 | 名字、可选主人 QQ、系统提示词、Codex/API 模型、OneBot 地址与 Token、共享教材目录 |
-| 服务连接 | UCloud 学号密码登录与同步间隔、GitHub Token/现有 gh 登录、Google OAuth/现有 rclone 登录、连接测试 |
-| 群组 | 读取 QQ 已加入群、添加/移除/备注、允许回复、每群历史归纳授权 |
-| 记忆 | 启用/停用、上下文条数和时效、长期记忆增删改、群摘要编辑/清空、最近上下文查看与清空 |
-| 群通知整理（独立插件页） | 只读群列表、周期与历史范围、重要事项关注点、独立私聊接收 QQ、带原文依据的报告 |
+| 机器人核心 | 昵称、可选主人 QQ、提示词、订阅/API 模型、ChatGPT 登录与状态、OneBot、共享教材、群权限与记忆 |
+| GitHub | ChatGPT 连接器 / Token / 本机 gh 登录、默认仓库、连接测试 |
+| Google Drive | ChatGPT 连接器 / Google OAuth / 本机 rclone 登录、起始目录、连接测试 |
+| UCloud | 学校登录、同步周期、近期作业与私聊截止提醒 |
+| 群通知整理 | 只读群列表、周期与历史范围、关注点、独立接收 QQ、带依据的报告 |
+
+### 换 QQ 与 ChatGPT Plus / 其他模型
+
+同一台电脑、同一项目目录换机器人 QQ，只改变 NapCat 登录账号；模型、提示词、服务授权、长期记忆和通知报告仍在本机。重新确认新号已加入的群和私聊接收人。原有群规则仍会保留，不会自动改成新号全部群可用。QQ 是否能补齐旧历史以新账号实际可见记录为准。换电脑或 Windows 用户时，DPAPI 密钥不能直接复用，需重新授权。
+
+核心页的“登录 ChatGPT”通过官方 Codex App Server 启动浏览器登录；已经登录时不替换账户。“检查订阅登录”只读账户状态、不消耗模型回合、不显示凭据。当前推理仍通过官方 Codex CLI 使用 ChatGPT 订阅可用模型与额度；Plus 登录不等于获得按量 API Key，也不保证所有模型均可用。API 模式单独配置、单独计费，订阅不可用时不会自动改走 API。
+
+GitHub / Drive 是本程序的资料模块，可以选用同一 ChatGPT 账号在 Codex 可访问的应用连接器。回答模型与资料读取分开：兼容 OpenAI Chat Completions 的其他模型也可以用检索结果回答，连接器仍由本机已授权的 ChatGPT / Codex 负责，第三方模型不会得到其凭据。检索到的正文会发送给配置的模型服务；切换前应确认接受这一数据去向。Claude / Gemini 等原生协议未直接适配，需要兼容接口或额外适配器；不能声称任意模型能直接加载 ChatGPT 的托管插件。
+
+官方依据：[Codex 登录方式](https://learn.chatgpt.com/docs/auth)、[App Server 的连接器与工具调用](https://learn.chatgpt.com/docs/app-server)、[Sign in with ChatGPT](https://developers.openai.com/siwc/quickstart)。本项目当前使用本机 Codex 登录，不声称已实现独立应用的全部 Sign in with ChatGPT 注册流程。
 
 ### 年级群只读整理与主动汇报
 

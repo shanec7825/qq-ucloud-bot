@@ -7,21 +7,29 @@ import { pathToFileURL } from 'node:url';
 import { AdminBridge, allowedRoute, registerBridge } from '../napcat-plugin/bridge.mjs';
 import { startAdmin } from '../src/admin-server.mjs';
 import { SettingsStore } from '../src/settings.mjs';
-import { trustSlyraPlugin } from '../napcat-plugin/local-trust.mjs';
+import { trustAgentPlugins } from '../napcat-plugin/local-trust.mjs';
+import { PLUGIN_MODULES, nativeConfigSchema } from '../napcat-plugin/catalog.mjs';
 
-test('local trust exception affects only slyra and retains sensitive-word restrictions', () => {
+test('local trust exception affects only installed agent modules and retains sensitive-word restrictions', () => {
   const source = 'return this.isOfficialPlugin(e) ? null : r ? "blocked-keyword" : "blocked-unofficial";';
-  const changed = trustSlyraPlugin(source), evaluate = Function('e', 'r', changed).bind({ isOfficialPlugin: id => id === 'official' });
+  const changed = trustAgentPlugins(source), evaluate = Function('e', 'r', changed).bind({ isOfficialPlugin: id => id === 'official' });
   assert.equal(evaluate('official', true), null);
-  assert.equal(evaluate('napcat-plugin-slyra', false), null);
-  assert.equal(evaluate('napcat-plugin-slyra', true), 'blocked-keyword');
-  assert.equal(evaluate('napcat-plugin-slyra-monitor', false), null);
-  assert.equal(evaluate('napcat-plugin-slyra-monitor', true), 'blocked-keyword');
+  for (const plugin of PLUGIN_MODULES) { assert.equal(evaluate(plugin.id, false), null); assert.equal(evaluate(plugin.id, true), 'blocked-keyword'); }
+  assert.equal(evaluate('napcat-plugin-slyra', false), 'blocked-unofficial');
   assert.equal(evaluate('napcat-plugin-slyra-evil', false), 'blocked-unofficial');
   assert.equal(evaluate('untrusted', false), 'blocked-unofficial');
-  assert.equal(trustSlyraPlugin(changed), changed); assert.throws(() => trustSlyraPlugin('unknown version'));
+  assert.equal(trustAgentPlugins(changed), changed); assert.throws(() => trustAgentPlugins('unknown version'));
   const legacy = 'return this.isOfficialPlugin(e) || (e === "napcat-plugin-slyra" && !r) ? null : r ? "blocked-keyword" : "blocked-unofficial";';
-  assert.equal(trustSlyraPlugin(legacy), changed);
+  assert.equal(trustAgentPlugins(legacy), changed);
+  const previous = 'return this.isOfficialPlugin(e) || (["napcat-plugin-slyra","napcat-plugin-slyra-monitor"].includes(e) && !r) ? null : r ? "blocked-keyword" : "blocked-unofficial";';
+  assert.equal(trustAgentPlugins(previous), changed);
+  assert.throws(() => trustAgentPlugins(previous.replace('napcat-plugin-slyra-monitor', 'napcat-plugin-other')));
+});
+
+test('module configuration opens in the native plugin card without registering extension pages', () => {
+  assert.equal(PLUGIN_MODULES.length, 5);
+  for (const plugin of PLUGIN_MODULES) { const schema = nativeConfigSchema(plugin.id); assert.equal(schema[0].type, 'html'); assert.ok(schema[0].default.includes('/plugin/' + plugin.id + '/files/ui/index.html')); }
+  assert.throws(() => nativeConfigSchema('untrusted'));
 });
 
 test('NapCat bridge restricts methods and paths; never proxies arbitrary URLs or sessions', () => {
@@ -64,7 +72,7 @@ test('bridge logs in server-side, preserves save conflicts and hides bootstrap c
     await writeFile(new URL('napcat-ui.json', root), JSON.stringify({ origin: 'http://127.0.0.1:6099' }));
     await admin.close(); admin = await startAdmin({ store, runtime, vault: { flags: () => ({}) }, root, port: 0 });
     const redirect = await fetch(admin.origin + '/', { redirect: 'manual' });
-    assert.equal(redirect.status, 303); assert.equal(redirect.headers.get('location'), 'http://127.0.0.1:6099/webui/extension#');
+    assert.equal(redirect.status, 303); assert.equal(redirect.headers.get('location'), 'http://127.0.0.1:6099/webui/plugins#');
   } finally { await admin?.close(); await rm(folder, { recursive: true, force: true }); }
 });
 

@@ -6,10 +6,10 @@ try {
     try {
       const ui = JSON.parse(await readFile(new URL('napcat-ui.json', root), 'utf8'));
       if (/^http:\/\/127\.0\.0\.1:\d+$/.test(ui.origin)) {
-        const command = process.platform === 'win32' ? ['rundll32.exe', ['url.dll,FileProtocolHandler', ui.origin + '/webui/extension']] : process.platform === 'darwin' ? ['open', [ui.origin + '/webui/extension']] : ['xdg-open', [ui.origin + '/webui/extension']];
+        const command = process.platform === 'win32' ? ['rundll32.exe', ['url.dll,FileProtocolHandler', ui.origin + '/webui/plugins']] : process.platform === 'darwin' ? ['open', [ui.origin + '/webui/plugins']] : ['xdg-open', [ui.origin + '/webui/plugins']];
         const child = spawn(command[0], command[1], { windowsHide: true, shell: false, stdio: 'ignore' });
-        child.on('error', () => { console.error('请在浏览器打开 NapCat 扩展页面。'); process.exitCode = 1; });
-        console.log('已请求打开 NapCat → 扩展页面 → slyra 设置。');
+        child.on('error', () => { console.error('请在浏览器打开 NapCat 插件管理。'); process.exitCode = 1; });
+        console.log('已请求打开 NapCat → 插件管理 → 插件配置。');
         await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
         process.exit(0);
       }

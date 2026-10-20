@@ -6,6 +6,7 @@ export function createMessageHandler({ bot, groups, memory, getDependencies, ...
   const queues = new Map(), seen = new Set();
   const handler = async event => {
     const current = () => getDependencies ? getDependencies() : { ...deps, groups };
+    if (current().enabled === false) return;
     if (event.post_type !== 'message' || !['group', 'private'].includes(event.message_type) || String(event.user_id) === String(event.self_id)) return;
     if (event.message_type === 'group' && !current().groups.includes(String(event.group_id))) return;
     const text = incomingText(event, current().groups);
@@ -24,20 +25,20 @@ export function createMessageHandler({ bot, groups, memory, getDependencies, ...
     if ((previous?.count || 0) >= 8) { await bot.send(target, '我还在处理前面的消息，稍等一下再 @ 我。'); return; }
     const work = (previous?.promise || Promise.resolve()).catch(() => {}).then(async () => {
       const active = current();
-      if (!incomingText(event, active.groups)) return;
+      if (active.enabled === false || !incomingText(event, active.groups)) return;
       const memoryVersion = memory.version;
       memory.add(event, text);
       let response;
       try {
         await active.members?.prepare(event);
-        if (!incomingText(event, current().groups) || active.transportVersion !== current().transportVersion) return;
+        if (current().enabled === false || !incomingText(event, current().groups) || active.transportVersion !== current().transportVersion || active.capabilities !== current().capabilities) return;
         response = await routeNatural(text, event, { ...active, memory, groupBackground: memory.version === capturedVersion ? groupBackground : [] });
       }
       catch (error) {
         response = event.message_type !== 'private' || String(event.user_id) !== active.owner ? '我这次没连上，稍后再问我一下。' :
           error instanceof TypeError || error.name === 'TimeoutError' ? '网络请求失败或超时，请检查服务连接。' : error.message;
       }
-      if (!incomingText(event, current().groups) || active.owner !== current().owner || active.transportVersion !== current().transportVersion) return;
+      if (current().enabled === false || !incomingText(event, current().groups) || active.owner !== current().owner || active.transportVersion !== current().transportVersion || active.capabilities !== current().capabilities) return;
       const sent = await bot.send(target, response, event.message_type === 'group' ? { replyTo: event.message_id, mention: event.user_id } : undefined);
       if (memory.version === memoryVersion) memory.add({ ...event, message_id: sent?.[0]?.message_id ?? '', inReplyTo: event.message_id, message: [], time: Date.now() / 1000 }, response, true);
     });

@@ -36,6 +36,7 @@
             <div class="section-heading"><h2>模型</h2><p>选用现有订阅，或连接你自己的兼容服务。</p></div>
             <div class="two-columns"><label>接入方式<select data-setting="ai.backend"><option value="codex">Codex · ChatGPT 订阅</option><option value="api">OpenAI 兼容 API</option></select></label><label id="codex-model">Codex 模型<input data-setting="ai.model" maxlength="100" list="model-options" required><datalist id="model-options"><option value="gpt-6-luna"></option><option value="gpt-6.1-sol"></option></datalist></label></div>
             <p id="codex-help" class="hint">沿用本机 Codex 的 ChatGPT 登录。模型须在你的账号中可用，额度不足时不会自动改成 API。</p>
+            <div class="action-row"><button id="codex-status" type="button">检查订阅登录</button><button id="codex-login" type="button">登录 ChatGPT</button></div><p id="codex-account-state" class="hint">ChatGPT Plus / Pro 订阅通过官方 Codex 登录使用，与下方按量 API 分开。</p>
             <div id="api-options" hidden><label>API 根地址<input data-setting="ai.baseURL" type="url" placeholder="https://api.openai.com/v1"></label><div class="two-columns"><label>API 模型<input data-setting="ai.apiModel" maxlength="100"></label><label>API Key<input data-secret="openaiKey" type="password" autocomplete="new-password"><span class="hint" data-secret-status="openaiKey"></span></label></div><p class="hint">API 单独计费。当前兼容 API 路径以文本为主，完整看图能力请使用 Codex。</p></div>
             <div class="action-row"><button type="button" data-check="model">测试当前模型</button><span id="check-model" class="hint">测试会发起一次模型请求。</span></div>
           </div>
@@ -43,14 +44,14 @@
         </section>
         <section data-view="connections" hidden>
           <div class="page-heading"><div><h1>连接你的资料</h1><p>给机器人需要的访问能力，私人资料仍只在主人私聊中读取。</p></div></div>
-          <div class="connection panel">
+          <div class="connection panel" data-service="ucloud">
             <div class="service-heading"><span class="service-logo school" aria-hidden="true">U</span><div><h2>UCloud</h2><p>北京邮电大学教学云 · 最近截止作业</p></div><span class="badge" data-service-state="ucloud">未检查</span></div>
             <label class="check"><input type="checkbox" data-setting="school.enabled">启用教学云作业</label>
             <div class="two-columns"><label>检查间隔（秒）<input type="number" data-setting="school.pollSeconds" min="60" max="86400" required></label><label class="check"><input type="checkbox" data-setting="school.reminders">将截止提醒发给主人私聊</label></div>
             <div class="credential-box"><div class="two-columns"><label>学号<input id="school-user" autocomplete="username" maxlength="80"></label><label>学校密码<input id="school-password" type="password" autocomplete="current-password" maxlength="500"></label></div><div class="action-row"><button id="school-login" type="button">登录学校账号</button><span class="hint">密码仅用于本次登录，不保存。出现验证码时会提示。</span></div></div>
             <div class="action-row"><button type="button" data-check="ucloud">同步并测试</button><span id="check-ucloud" class="hint"></span></div>
           </div>
-          <div class="connection panel">
+          <div class="connection panel" data-service="github">
             <div class="service-heading"><span class="service-logo github" aria-hidden="true">G</span><div><h2>GitHub</h2><p>仓库目录、README 与文本文件</p></div><span class="badge" data-service-state="github">未检查</span></div>
             <label class="check"><input type="checkbox" data-setting="github.enabled">启用 GitHub 读取</label>
             <div class="two-columns"><label>授权方式<select data-setting="github.authMode"><option value="chatgpt">复用 ChatGPT GitHub 插件</option><option value="existing">沿用本机 gh 登录</option><option value="token">使用我自己的 Token</option></select></label><label>默认仓库（可选）<input data-setting="github.defaultRepo" placeholder="owner/repository" maxlength="200"></label></div>
@@ -59,7 +60,7 @@
             <p id="github-existing-help" class="hint">使用项目 data/gh 中已有的授权。新设备可以选择 Token，直接在本页设置。</p>
             <div class="action-row"><button type="button" data-check="github">测试 GitHub</button><span id="check-github" class="hint"></span></div>
           </div>
-          <div class="connection panel">
+          <div class="connection panel" data-service="drive">
             <div class="service-heading"><span class="service-logo drive" aria-hidden="true">D</span><div><h2>Google Drive</h2><p>只读连接你的云盘</p></div><span class="badge" data-service-state="drive">未检查</span></div>
             <label class="check"><input type="checkbox" data-setting="drive.enabled">启用 Google Drive 读取</label>
             <label>授权方式<select data-setting="drive.authMode"><option value="chatgpt">复用 ChatGPT Google Drive 插件</option><option value="existing">沿用本机 rclone 登录</option><option value="oauth">使用自己的 Google OAuth 客户端</option></select></label>
@@ -67,6 +68,7 @@
             <div id="google-oauth-options"><div class="two-columns"><label>OAuth Client ID<input data-setting="drive.clientId" maxlength="250" placeholder="….apps.googleusercontent.com"></label><label>Client Secret<input data-secret="googleClientSecret" type="password" autocomplete="new-password"><span class="hint" data-secret-status="googleClientSecret"></span></label></div><p class="hint">在 Google Cloud 启用 Drive API，并创建 OAuth 客户端。网页应用类型需把下面地址登记为授权回调；仅申请 Drive 只读权限。</p><div class="copy-row"><code id="google-redirect"></code><button id="copy-redirect" type="button">复制回调地址</button></div><div class="action-row"><button id="google-authorize" type="button">在 Google 中授权</button></div><p class="hint">授权页会在浏览器中打开；未验证的自建应用可能需要把自己加入测试用户。</p></div>
             <label id="drive-root-option">起始文件夹 ID（可选）<input data-setting="drive.rootFolderId" placeholder="留空为云盘根目录" maxlength="200"></label>
             <p class="hint">这里是私人 Drive 连接。群内教材共享仍使用“机器人”页设置的本机教材目录。</p>
+            <p class="hint">资料读取与回答模型分开。若选择其他模型服务，检索到的正文会发送给所选服务；ChatGPT 的登录凭据不会发给该服务。</p>
             <div class="action-row"><button type="button" data-check="drive">测试 Google Drive</button><span id="check-drive" class="hint"></span></div>
           </div>
         </section>

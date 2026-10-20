@@ -1,10 +1,10 @@
 {
-  "name": "napcat-plugin-slyra",
-  "plugin": "slyra 机器人配置",
-  "version": "0.8.0",
-  "description": "在 NapCat 中管理模型、提示词、群组、记忆、UCloud、GitHub 与 Google Drive。",
+  "name": "napcat-plugin-qq-agent",
+  "plugin": "QQ Agent · 机器人核心",
+  "version": "0.9.0",
+  "description": "通用 QQ AI 机器人核心，昵称与插件名称分开配置。",
   "type": "module",
   "main": "index.mjs",
-  "author": "slyra",
+  "author": "QQ Agent contributors",
   "napcat": { "minVersion": "4.14.0" }
 }

@@ -33,12 +33,12 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       // Binding to loopback plus an exact Host check prevents DNS rebinding.
       if (req.headers.host !== new URL(origin).host || !['127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) || !req.url.startsWith('/') || req.url.startsWith('//')) fail(403, '只允许本机管理地址。');
       const url = new URL(req.url, origin), route = url.pathname;
-      if (route === '/' && req.method === 'GET' && napcatOrigin) { res.writeHead(303, { location: napcatOrigin + '/webui/extension#' }); res.end(); return; }
+      if (route === '/' && req.method === 'GET' && napcatOrigin) { res.writeHead(303, { location: napcatOrigin + '/webui/plugins#' }); res.end(); return; }
       if (route === '/oauth/google/callback' && req.method === 'GET') {
         if (url.searchParams.has('error')) fail(400, 'Google 授权未完成，请返回管理台重试。');
         await runtime.google.complete(url.searchParams.get('state'), url.searchParams.get('code'), token => !!validSession(token));
         runtime.checks.drive = { ok: true, message: 'Google 只读授权已完成，请测试连接。', checkedAt: new Date().toISOString() };
-        res.writeHead(303, { location: napcatOrigin ? napcatOrigin + '/webui/extension#' : '/#connections' }); res.end(); return;
+        res.writeHead(303, { location: napcatOrigin ? napcatOrigin + '/webui/plugins#' : '/#connections' }); res.end(); return;
       }
       if (staticFiles.has(route) && req.method === 'GET') {
         const [file, type] = staticFiles.get(route); const bytes = await readFile(new URL('../web/' + file, import.meta.url));
@@ -91,6 +91,8 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (route === '/api/google/authorize' && req.method === 'POST') { json(runtime.google.begin(origin, token)); return; }
       if (/^\/api\/check\/(github|drive|ucloud|model)$/.test(route) && req.method === 'POST') { json(await runtime.check(route.split('/').at(-1))); return; }
       if (route === '/api/groups' && req.method === 'GET') { json({ groups: await runtime.groups() }); return; }
+      if (route === '/api/codex/account' && req.method === 'GET') { json(await runtime.account.status()); return; }
+      if (route === '/api/codex/login' && req.method === 'POST') { json(await runtime.account.begin()); return; }
       if (route === '/api/monitor' && req.method === 'GET') { json(await runtime.monitor.status()); return; }
       if (route === '/api/monitor/run' && req.method === 'POST') {
         const input = await body(req);

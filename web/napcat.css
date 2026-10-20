@@ -1,6 +1,7 @@
 /* The NapCat shell owns navigation, login, background and theme. */
-.monitor-only [data-tab]:not([data-tab=monitor]) { display: none; }
-.napcat-embedded:not(.monitor-only) [data-tab=monitor] { display: none; }
+[data-module=core] [data-tab=connections], [data-module=core] [data-tab=monitor] { display: none; }
+[data-module=notices] [data-tab]:not([data-tab=monitor]) { display: none; }
+[data-module=github] [data-tab]:not([data-tab=connections]), [data-module=drive] [data-tab]:not([data-tab=connections]), [data-module=ucloud] [data-tab]:not([data-tab=connections]) { display: none; }
 .napcat-embedded blockquote { overflow-wrap: anywhere; margin: 12px 0; padding: 10px 16px; border-left: 3px solid var(--accent); }
 .napcat-embedded { --accent: hsl(var(--nc-primary, 330 94% 50%)); --accent-soft: hsl(var(--nc-primary, 330 94% 50%) / .1); --ink: hsl(var(--nc-foreground, 240 6% 10%)); --muted: hsl(var(--nc-default-500, 240 4% 45%)); --surface: hsl(var(--nc-background, 0 0% 100%) / .55); --line: hsl(var(--nc-default-200, 240 6% 90%) / .7); background: transparent; color: var(--ink); }
 html:has(.napcat-embedded) { background: transparent; color: var(--ink); }

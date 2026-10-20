@@ -23,6 +23,6 @@ async function main() {
   const settings = store.get();
   console.log(`${settings.bot.name} 已启动；群里必须 @，模型：${settings.ai.backend === 'codex' ? settings.ai.model : settings.ai.apiModel || '待配置'}。`);
   const ui = await readJSON(new URL('../data/napcat-ui.json', import.meta.url), null);
-  console.log(`配置入口：${ui?.origin ? ui.origin + '/webui/extension' : admin.origin}；运行 npm run admin:open 打开。`);
+  console.log(`配置入口：${ui?.origin ? ui.origin + '/webui/plugins' : admin.origin}；运行 npm run admin:open 打开。`);
 }
 main().catch(error => { console.error(error.code === 'EADDRINUSE' ? '管理台端口已占用，请检查已有进程或修改 ADMIN_PORT。' : error instanceof TypeError ? '网络或配置初始化失败，请检查连接。' : error.message); process.exitCode = 1; });

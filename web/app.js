@@ -2,8 +2,11 @@ const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 let state, csrf, dirty = false, groups = [], memories, editingNote, saving = false;
 const inNapcat = document.body.dataset.napcat === 'true';
-const pluginId = document.body.dataset.plugin === 'napcat-plugin-slyra-monitor' ? 'napcat-plugin-slyra-monitor' : 'napcat-plugin-slyra';
-const monitorOnly = inNapcat && pluginId === 'napcat-plugin-slyra-monitor';
+const moduleIds = { core: 'napcat-plugin-qq-agent', github: 'napcat-plugin-agent-github', drive: 'napcat-plugin-agent-drive', ucloud: 'napcat-plugin-agent-ucloud', notices: 'napcat-plugin-agent-notices' };
+const moduleName = Object.hasOwn(moduleIds, document.body.dataset.module) ? document.body.dataset.module : 'core';
+const pluginId = moduleIds[moduleName];
+const monitorOnly = inNapcat && moduleName === 'notices';
+const serviceOnly = inNapcat && ['github', 'drive', 'ucloud'].includes(moduleName);
 const titles = { bot: '机器人', connections: '服务连接', groups: '群组', memory: '记忆', monitor: '群通知整理' };
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 function notice(message, error = false) { let box = $('#feedback'); if ($('#shell').hidden) { box = $('#login-feedback'); if (!box) { box = element('p', undefined, 'feedback'); box.id = 'login-feedback'; box.setAttribute('role', 'status'); $('#login').append(box); } } box.textContent = message; box.classList.toggle('error', error); box.hidden = false; if (error) box.scrollIntoView({ block: 'nearest', behavior: 'instant' }); }
@@ -11,7 +14,7 @@ async function api(path, method = 'GET', value) {
   let response;
   if (inNapcat) {
     let credential; try { credential = JSON.parse(localStorage.getItem('token') || 'null'); } catch {}
-    if (typeof credential !== 'string' || !credential) throw new Error('请先在 NapCat 登录，再打开 slyra 设置。');
+    if (typeof credential !== 'string' || !credential) throw new Error('请先在 NapCat 登录，再打开插件配置。');
     response = await fetch('/api/Plugin/ext/' + pluginId + '/bridge', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + credential }, body: JSON.stringify({ method, path, ...(value !== undefined ? { value } : {}) }) });
   } else response = await fetch('/api/' + path, { method, headers: { ...(value !== undefined ? { 'content-type': 'application/json' } : {}), ...(csrf ? { 'x-csrf-token': csrf } : {}) }, ...(value !== undefined ? { body: JSON.stringify(value) } : {}) });
   const data = await response.json();
@@ -77,7 +80,8 @@ function renderStatus() {
   const online = status.qq.connected, badge = $('#qq-status'); badge.textContent = online ? 'QQ 已连接' : status.qq.configured ? 'QQ 未连接' : 'QQ 待配置'; badge.classList.toggle('ok', online);
   for (const service of ['ucloud', 'github', 'drive']) {
     const checked = status.checks[service], badge = $(`[data-service-state="${service}"]`);
-    badge.textContent = checked ? checked.ok ? '已验证' : '连接失败' : status.configured[service] ? '有登录配置 · 待验证' : '待连接';
+    const chatgptMode = ['github', 'drive'].includes(service) && state.settings[service].authMode === 'chatgpt';
+    badge.textContent = checked ? checked.ok ? '已验证' : '连接失败' : status.configured[service] ? '有登录配置 · 待验证' : chatgptMode ? 'ChatGPT · 按需连接' : '待连接';
     badge.classList.toggle('ok', !!checked?.ok); badge.classList.toggle('error', checked?.ok === false);
     $('#check-' + service).textContent = checked ? checked.message + ' · ' + new Date(checked.checkedAt).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '';
   }
@@ -85,11 +89,12 @@ function renderStatus() {
 }
 function showLogin() {
   $('#shell').hidden = true; $('#login').hidden = false;
-  if (inNapcat) { $('#login-form').hidden = true; $('#login h1').textContent = '请先登录 NapCat'; $('#login p').textContent = '登录 NapCat 后，从扩展页面打开 slyra 设置，无需第二次登录。'; }
+  if (inNapcat) { $('#login-form').hidden = true; $('#login h1').textContent = '请先登录 NapCat'; $('#login p').textContent = '登录 NapCat 后，从插件卡片打开配置，无需第二次登录。'; }
 }
 async function enter() { state = await api('state'); fillSettings(); $('#login').hidden = true; $('#shell').hidden = false; navigate(false); }
 function navigate(focus = true) {
-  const tab = monitorOnly ? 'monitor' : Object.hasOwn(titles, location.hash.slice(1)) ? location.hash.slice(1) : 'bot';
+  const requested = location.hash.slice(1);
+  const tab = monitorOnly ? 'monitor' : serviceOnly ? 'connections' : Object.hasOwn(titles, requested) && (!inNapcat || !['connections', 'monitor'].includes(requested)) ? requested : 'bot';
   for (const section of $$('[data-view]')) section.hidden = section.dataset.view !== tab;
   $('#memory-tools').hidden = tab !== 'memory'; $('#page-label').textContent = titles[tab];
   $('#monitor-tools').hidden = tab !== 'monitor';
@@ -132,6 +137,20 @@ $('#discover-monitor-groups').addEventListener('click', () => busy($('#discover-
     $('#monitor-group-ids').value = [...selected].join('\n'); markDirty(); notice('已加入只读监测列表，请保存以应用禁言保护。');
   }));
   if (!data.groups.length) list.append(element('p', 'QQ 没有返回已加入的群。', 'empty'));
+}));
+$('#codex-status').addEventListener('click', () => busy($('#codex-status'), async () => {
+  const status = await api('codex/account');
+  $('#codex-account-state').textContent = status.authenticated ? '已登录 ChatGPT 订阅；实际模型和可用额度以账号为准。' : status.loginPending ? '等待你在 OpenAI 页面完成登录，完成后再检查。' : '尚未使用 ChatGPT 登录。可点击“登录 ChatGPT”。';
+}));
+$('#codex-login').addEventListener('click', () => busy($('#codex-login'), async () => {
+  const popup = window.open('about:blank', '_blank');
+  try {
+    const result = await api('codex/login', 'POST', {});
+    if (result.authenticated) { popup?.close(); $('#codex-account-state').textContent = '本机已登录 ChatGPT，可以使用订阅后端。'; return; }
+    if (popup) popup.location.href = result.authUrl;
+    else { const link = element('a', '打开 OpenAI 登录页面'); link.href = result.authUrl; link.target = '_blank'; link.rel = 'noopener'; $('#codex-account-state').replaceChildren(link); }
+    notice('在 OpenAI 页面完成登录，然后点击“检查订阅登录”。不会自动切换到按量 API。');
+  } catch (error) { popup?.close(); throw error; }
 }));
 function renderGroups() {
   const list = $('#group-list'); list.replaceChildren();
@@ -207,7 +226,13 @@ window.addEventListener('beforeunload', event => { if (dirty || $('#note-text').
 async function bootstrap() {
   if (inNapcat) {
     document.body.classList.add('napcat-embedded');
-    if (monitorOnly) document.body.classList.add('monitor-only');
+    if (serviceOnly) {
+      for (const card of $$('[data-service]')) card.hidden = card.dataset.service !== moduleName;
+      const label = { github: 'GitHub', drive: 'Google Drive', ucloud: 'UCloud' }[moduleName];
+      $('[data-view="connections"] h1').textContent = label + ' 连接';
+      $('[data-view="connections"] .page-heading p').textContent = '此模块可独立启停。私人 GitHub / Drive 仅允许机器人核心设置的主人 QQ 私聊访问。';
+      $('[data-tab="connections"]').textContent = label;
+    }
     try {
       const source = getComputedStyle(parent.document.documentElement);
       for (const name of ['primary', 'background', 'foreground', 'default-100', 'default-200', 'default-500']) {

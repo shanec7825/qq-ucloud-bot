@@ -16,7 +16,7 @@ The group background window, sender identification and quote/mention reply desig
 
 ## NapCat configuration extension
 
-The integration uses the documented authenticated plugin router and extension-page APIs described in [NapCat's plugin WebUI guide](https://napneko.github.io/develop/plugin/start-webui). This repository ships its own bridge and shared settings frontend, not NapCat frontend assets. An explicitly selected local compatibility patch trusts only `napcat-plugin-slyra` and `napcat-plugin-slyra-monitor` in builds with a hardcoded official-plugin list; all other non-official plugin restrictions are preserved. NapCat's license is retained under `licenses/NapCat.txt`. The notice-monitor extension uses the separately installed QQ Chat Exporter plugin; no exporter implementation is bundled here.
+The integration uses NapCat's authenticated plugin router, native HTML config schema and lifecycle APIs. This repository ships its own bridge and configuration frontend, not NapCat frontend assets. Five fixed module IDs are listed in `napcat-plugin/catalog.mjs`; an explicitly selected compatibility patch trusts only those IDs in builds with a hardcoded official-plugin list, preserving sensitive-word checks and all other plugin restrictions. Native configuration embeds the shared UI without registering separate extension pages. NapCat's license is retained under `licenses/NapCat.txt`. Notice monitoring uses the separately installed QQ Chat Exporter plugin; no exporter implementation is bundled here.
 
 ## Runtime dependencies
 

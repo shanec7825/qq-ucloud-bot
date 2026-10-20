@@ -16,6 +16,8 @@ import { modelEnv } from './settings.mjs';
 import { ChatGPTConnectorClient, ChatGPTResources } from './chatgpt-connectors.mjs';
 import { GroupMembers } from './group-members.mjs';
 import { NoticeMonitor } from './notice-monitor.mjs';
+import { moduleActive } from './plugin-modules.mjs';
+import { CodexAccount } from './codex-account.mjs';
 
 const project = new URL('../', import.meta.url);
 export class BotRuntime {
@@ -26,20 +28,26 @@ export class BotRuntime {
     this.catalog = new PublicCatalog(new URL('public-assignments.json', root), new URL('public/books.json', project));
     this.google = new GoogleDrive({ settings: () => store.get(), vault });
     this.connectors = new ChatGPTConnectorClient(); this.native = new ChatGPTResources(this.connectors);
+    this.account = new CodexAccount();
     this.history = new HistoryDigest({ root: new URL('history/', root), ai: (q, c) => this.ai(q, c) });
     this.proxy = { call: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接，请配置 OneBot。'); return this.bot.call(...args); }, send: (target, ...args) => {
       if (target.group_id && this.store.get().monitor.groups.includes(String(target.group_id))) throw new Error('监测群禁止机器人发言。');
       if (!this.bot) throw new Error('QQ 尚未连接。'); return this.bot.send(target, ...args);
     } };
     this.media = new MessageMedia(this.proxy);
-    this.monitor = new NoticeMonitor({ settings: () => this.store.get(), ai: (q, c) => this.ai(q, c), send: (target, text) => this.proxy.send(target, text), root: new URL('notices/', root) });
+    this.monitor = new NoticeMonitor({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), send: (target, text) => this.proxy.send(target, text), root: new URL('notices/', root) });
     this.members = new GroupMembers(this.proxy, () => this.store.get().groups.filter(group => group.enabled).map(group => group.id));
     this.handler = createMessageHandler({ bot: this.proxy, memory: this.memory, getDependencies: () => this.dependencies() });
+  }
+  config() {
+    const config = this.store.get();
+    for (const [section, module] of [['github', 'github'], ['drive', 'drive'], ['school', 'ucloud'], ['monitor', 'notices']]) config[section].enabled &&= moduleActive(this.root, module);
+    return config;
   }
   env(config = this.store.get()) {
     return modelEnv(config, { openaiKey: this.vault.get('openaiKey'), githubToken: config.github.authMode === 'token' ? this.vault.get('githubToken') : '' });
   }
-  async ai(question, context, config = this.store.get()) {
+  async ai(question, context, config = this.config()) {
     const env = this.env(config);
     return config.ai.backend === 'api' ? askAI(question, context, env) : askCodex(question, context, env);
   }
@@ -71,12 +79,12 @@ export class BotRuntime {
     };
   }
   dependencies() {
-    const config = this.store.get(), enabled = config.groups.filter(g => g.enabled);
+    const config = this.config(), enabled = config.groups.filter(g => g.enabled);
     if (!this.library || this.libraryRoot !== config.library.root) { this.libraryRoot = config.library.root; this.library = config.library.root ? new SharedLibrary(config.library.root) : null; }
     const catalog = config.school.enabled ? this.catalog : {
       list: async () => 'UCloud 未启用。', detail: async () => 'UCloud 未启用。', upcomingTasks: async () => [], books: () => this.catalog.books(),
     };
-    return { groups: enabled.filter(g => !config.monitor.groups.includes(g.id)).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
+    return { enabled: moduleActive(this.root, 'core'), capabilities: JSON.stringify([config.github.enabled, config.drive.enabled, config.school.enabled]), groups: enabled.filter(g => !config.monitor.groups.includes(g.id)).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
       resources: this.resources(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: this.media, members: this.members,
       notes: config.memory.enabled ? this.notes : null, monitor: this.monitor,
       history: config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
@@ -84,7 +92,7 @@ export class BotRuntime {
     };
   }
   apply() {
-    const config = this.store.get(); this.memory.configure(config.memory);
+    const config = this.config(); this.memory.configure(config.memory);
     this.members.retain();
     for (const scope of this.memory.sessions.keys()) if (scope.startsWith('group:') && !config.groups.some(group => group.enabled && 'group:' + group.id === scope)) this.memory.clear(scope);
     const appSignature = JSON.stringify([config.drive.authMode, config.drive.rootFolderId, config.drive.enabled, config.github.authMode, config.github.enabled, config.bot.ownerQQ, config.memory.enabled]);
@@ -103,10 +111,10 @@ export class BotRuntime {
     if (!Array.isArray(this.state.known) || !this.state.sent || typeof this.state.sent !== 'object') throw new Error('提醒状态格式无效，请检查 data/state.json。');
     this.apply(); this.interval = setInterval(() => this.tick().catch(() => {}), 1000); this.interval.unref(); this.tick().catch(() => {});
   }
-  stop() { this.stopped = true; clearInterval(this.interval); this.bot?.close(); this.connectors.dispose(); }
+  stop() { this.stopped = true; clearInterval(this.interval); this.bot?.close(); this.connectors.dispose(); this.account.close(); }
   async sync() {
     if (this.schoolLoginBusy) throw new Error('学校登录正在进行，请稍后同步。');
-    if (!this.store.get().school.enabled) throw new Error('请先启用 UCloud。');
+    if (!this.config().school.enabled) throw new Error('请先启用 UCloud 插件与作业功能。');
     if (!this.syncing) this.syncing = (async () => {
       const tasks = await this.catalog.refresh(this.school);
       this.checks.ucloud = { ok: true, message: `同步成功，${upcoming(tasks).length} 项未截止作业`, checkedAt: new Date().toISOString() };
@@ -119,14 +127,14 @@ export class BotRuntime {
     this.ticking = true;
     try {
       if (!this.lastMemoryPrune || Date.now() - this.lastMemoryPrune >= 60000) { this.memory.prune(); this.lastMemoryPrune = Date.now(); }
-      const config = this.store.get();
+      const config = this.config();
       if (config.school.enabled && (!this.lastPoll || Date.now() - this.lastPoll >= config.school.pollSeconds * 1000)) {
         this.lastPoll = Date.now();
         try {
           const tasks = upcoming(await this.sync());
           if (config.school.reminders && config.bot.ownerQQ && this.bot?.socket?.readyState === WebSocket.OPEN) {
             for (const notice of notificationPlan(tasks, this.state).filter(n => n.key.startsWith('due:'))) {
-              if (!this.store.get().school.reminders || this.store.get().bot.ownerQQ !== config.bot.ownerQQ) break;
+              if (!this.config().school.enabled || !this.store.get().school.reminders || this.store.get().bot.ownerQQ !== config.bot.ownerQQ) break;
               await this.proxy.send({ user_id: config.bot.ownerQQ }, notice.text); this.state.sent[notice.key] = true;
               await saveJSON(new URL('state.json', this.root), this.state);
             }
@@ -135,11 +143,11 @@ export class BotRuntime {
           await saveJSON(new URL('state.json', this.root), this.state);
         } catch { /* Safe diagnostics are available in the local admin status. */ }
       }
-      const current = this.store.get();
+      const current = this.config();
       if (!this.stopped && current.monitor.enabled && !this.handler.isBusy() && (!this.lastMonitor || Date.now() - this.lastMonitor >= 60000)) {
         this.lastMonitor = Date.now(); await this.monitor.run();
       }
-      if (!this.stopped && current.history.enabled && current.memory.enabled && !this.handler.isBusy() && (!this.lastHistory || Date.now() - this.lastHistory > 60000)) {
+      if (!this.stopped && moduleActive(this.root, 'core') && current.history.enabled && current.memory.enabled && !this.handler.isBusy() && (!this.lastHistory || Date.now() - this.lastHistory > 60000)) {
         this.lastHistory = Date.now();
         await this.history.tick(current.groups.filter(g => g.enabled && g.historyEnabled).map(g => g.id));
       }
@@ -151,6 +159,7 @@ export class BotRuntime {
       qq: { connected: this.bot?.socket?.readyState === WebSocket.OPEN, configured: !!this.vault.get('onebotToken'), accountConfigured: !!this.store.get().bot.ownerQQ },
       configured: { ucloud: await exists('session.json'), github: this.store.get().github.authMode === 'chatgpt' ? this.connectors.apps.has('github') : !!this.vault.get('githubToken') || await exists('gh/hosts.yml'), drive: this.store.get().drive.authMode === 'chatgpt' ? this.connectors.apps.has('google_drive') : !!this.vault.get('googleTokens') || await exists('rclone.conf') },
       checks: this.checks, pendingMessages: this.handler.isBusy(), settingsRevision: this.store.get().revision,
+      modules: Object.fromEntries(['core', 'github', 'drive', 'ucloud', 'notices'].map(name => [name, moduleActive(this.root, name)])),
     };
   }
   async groups() {
@@ -161,8 +170,8 @@ export class BotRuntime {
     try {
       let message;
       if (service === 'ucloud') { await this.sync(); return this.checks.ucloud; }
-      if (service === 'github') { await this.resources(this.store.get()).github(''); message = '已验证 GitHub 读取权限'; }
-      else if (service === 'drive') { await this.resources(this.store.get()).drive('列表', ''); message = '已验证 Google Drive 读取权限'; }
+      if (service === 'github') { await this.resources(this.config()).github(''); message = '已验证 GitHub 读取权限'; }
+      else if (service === 'drive') { await this.resources(this.config()).drive('列表', ''); message = '已验证 Google Drive 读取权限'; }
       else if (service === 'model') { await this.ai('仅回复：连接成功', {}); message = '模型已返回文字'; }
       else throw new Error('未知连接。');
       return this.checks[service] = { ok: true, message, checkedAt: new Date().toISOString() };
