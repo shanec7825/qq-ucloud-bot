@@ -17,6 +17,7 @@ try {
   const store = new SettingsStore(new URL('settings.json', root), {}); await store.load();
   const vault = new SecretVault(root, {}, { protect: value => Buffer.from(value).toString('base64'), unprotect: value => Buffer.from(value, 'base64').toString('utf8') }); await vault.load();
   runtime = new BotRuntime(store, vault, { root });
+  runtime.connectors.ready = async () => { runtime.connectors.apps.set('github', { name: 'GitHub' }); runtime.connectors.apps.set('google_drive', { name: 'Google Drive' }); };
   runtime.check = async () => ({ ok: true, message: '隔离测试连接成功', checkedAt: new Date().toISOString() });
   runtime.groups = async () => [{ id: '300000001', name: '课程讨论群' }];
   await runtime.start();
@@ -52,6 +53,11 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-secret="githubToken"]').value === '');
   assert.equal(vault.get('githubToken'), 'browser-test-token');
   assert.ok(!(await page.content()).includes('browser-test-token'));
+  await page.locator('[data-setting="github.authMode"]').selectOption('chatgpt');
+  await page.locator('[data-setting="drive.authMode"]').selectOption('chatgpt');
+  await page.locator('#save-settings').click();
+  await page.waitForFunction(() => document.querySelector('#save-state').textContent === '配置已保存');
+  assert.equal(store.get().drive.authMode, 'chatgpt'); assert.equal(await page.locator('#google-oauth-options').isVisible(), false); assert.equal(await page.locator('#drive-chatgpt-help').isVisible(), true);
   await page.locator('#school-user').fill('test-student'); await page.locator('#school-password').fill('never-save-password'); await page.locator('#school-login').click();
   await page.waitForFunction(() => document.querySelector('#school-password').value === '');
   await page.reload(); await page.locator('#shell').waitFor({ state: 'visible' });

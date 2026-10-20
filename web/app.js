@@ -15,8 +15,10 @@ function dependencies() {
   const backend = $('[data-setting="ai.backend"]').value;
   $('#api-options').hidden = backend !== 'api'; $('#codex-model').hidden = backend !== 'codex'; $('#codex-help').hidden = backend !== 'codex';
   const token = $('[data-setting="github.authMode"]').value === 'token';
-  $('#github-token-options').hidden = !token; $('#github-existing-help').hidden = token;
-  $('#google-oauth-options').hidden = $('[data-setting="drive.authMode"]').value !== 'oauth';
+  $('#github-token-options').hidden = !token; $('#github-existing-help').hidden = $('[data-setting="github.authMode"]').value !== 'existing';
+  $('#github-chatgpt-help').hidden = $('[data-setting="github.authMode"]').value !== 'chatgpt';
+  const driveMode = $('[data-setting="drive.authMode"]').value;
+  $('#google-oauth-options').hidden = driveMode !== 'oauth'; $('#drive-chatgpt-help').hidden = driveMode !== 'chatgpt'; $('#drive-root-option').hidden = driveMode === 'chatgpt';
 }
 function fillSettings() {
   groups = structuredClone(state.settings.groups);

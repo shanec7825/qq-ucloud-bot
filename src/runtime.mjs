@@ -13,6 +13,7 @@ import { MessageMedia } from './message-media.mjs';
 import { HistoryDigest } from './history-digest.mjs';
 import { ManagedMemory } from './managed-memory.mjs';
 import { modelEnv } from './settings.mjs';
+import { ChatGPTConnectorClient, ChatGPTResources } from './chatgpt-connectors.mjs';
 
 const project = new URL('../', import.meta.url);
 export class BotRuntime {
@@ -22,6 +23,7 @@ export class BotRuntime {
     this.school = new SchoolClient(new URL('session.json', root));
     this.catalog = new PublicCatalog(new URL('public-assignments.json', root), new URL('public/books.json', project));
     this.google = new GoogleDrive({ settings: () => store.get(), vault });
+    this.connectors = new ChatGPTConnectorClient(); this.native = new ChatGPTResources(this.connectors);
     this.history = new HistoryDigest({ root: new URL('history/', root), ai: (q, c) => this.ai(q, c) });
     this.proxy = { call: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接，请配置 OneBot。'); return this.bot.call(...args); }, send: (...args) => this.bot?.send(...args) };
     this.media = new MessageMedia(this.proxy);
@@ -39,15 +41,26 @@ export class BotRuntime {
     return {
       github: reference => {
         if (!config.github.enabled) throw new Error('GitHub 连接已停用，请在管理台启用。');
+        if (config.github.authMode === 'chatgpt') return this.native.github(reference || config.github.defaultRepo);
         if (config.github.authMode === 'token' && !this.vault.get('githubToken')) throw new Error('请先在管理台保存 GitHub Token。');
         return legacy.github(reference || config.github.defaultRepo);
       },
       drive: (action, path) => {
         if (!config.drive.enabled) throw new Error('Google Drive 已停用，请在管理台启用。');
+        if (config.drive.authMode === 'chatgpt') return this.native.drive(action, path);
         if (config.drive.authMode === 'oauth') return this.google.read(action, path);
         if (config.drive.rootFolderId) env.RCLONE_DRIVE_ROOT_FOLDER_ID = config.drive.rootFolderId;
         return legacy.drive(action, path);
       },
+      ...(config.drive.authMode === 'chatgpt' ? { driveQuestion: (question, event) => {
+        if (!config.drive.enabled) throw new Error('Google Drive 已停用。');
+        if (event.message_type !== 'private' || String(event.user_id) !== config.bot.ownerQQ) throw new Error('只有主人私聊可读取私人 Drive。');
+        return this.native.driveQuestion(question, config.memory.enabled ? 'private:' + String(event.user_id) : undefined);
+      } } : {}),
+      ...(config.github.authMode === 'chatgpt' ? { githubQuestion: (question, event) => {
+        if (!config.github.enabled || event.message_type !== 'private' || String(event.user_id) !== config.bot.ownerQQ) throw new Error('只有主人私聊可读取私人 GitHub。');
+        return this.native.githubQuestion(question, config.github.defaultRepo);
+      } } : {}),
     };
   }
   dependencies() {
@@ -65,6 +78,10 @@ export class BotRuntime {
   }
   apply() {
     const config = this.store.get(); this.memory.configure(config.memory);
+    const appSignature = JSON.stringify([config.drive.authMode, config.drive.rootFolderId, config.drive.enabled, config.github.authMode, config.github.enabled, config.bot.ownerQQ, config.memory.enabled]);
+    if (appSignature !== this.appSignature) { this.appSignature = appSignature; this.native.selections.clear(); }
+    if (config.drive.enabled && config.drive.authMode === 'chatgpt' || config.github.enabled && config.github.authMode === 'chatgpt') this.connectors.ready().catch(() => {});
+    else if (this.connectors.child) this.connectors.close();
     const token = this.vault.get('onebotToken') || '', signature = JSON.stringify([config.qq.url, token, !!config.bot.ownerQQ]);
     if (signature !== this.transportSignature) {
       this.transportSignature = signature; this.transportVersion++; this.bot?.close(); this.bot = null;
@@ -76,7 +93,7 @@ export class BotRuntime {
     if (!Array.isArray(this.state.known) || !this.state.sent || typeof this.state.sent !== 'object') throw new Error('提醒状态格式无效，请检查 data/state.json。');
     this.apply(); this.interval = setInterval(() => this.tick().catch(() => {}), 1000); this.interval.unref(); this.tick().catch(() => {});
   }
-  stop() { this.stopped = true; clearInterval(this.interval); this.bot?.close(); }
+  stop() { this.stopped = true; clearInterval(this.interval); this.bot?.close(); this.connectors.dispose(); }
   async sync() {
     if (this.schoolLoginBusy) throw new Error('学校登录正在进行，请稍后同步。');
     if (!this.store.get().school.enabled) throw new Error('请先启用 UCloud。');
@@ -118,7 +135,7 @@ export class BotRuntime {
     const exists = async name => { try { await access(new URL(name, this.root)); return true; } catch { return false; } };
     return {
       qq: { connected: this.bot?.socket?.readyState === WebSocket.OPEN, configured: !!this.vault.get('onebotToken'), accountConfigured: !!this.store.get().bot.ownerQQ },
-      configured: { ucloud: await exists('session.json'), github: !!this.vault.get('githubToken') || await exists('gh/hosts.yml'), drive: !!this.vault.get('googleTokens') || await exists('rclone.conf') },
+      configured: { ucloud: await exists('session.json'), github: this.store.get().github.authMode === 'chatgpt' ? this.connectors.apps.has('github') : !!this.vault.get('githubToken') || await exists('gh/hosts.yml'), drive: this.store.get().drive.authMode === 'chatgpt' ? this.connectors.apps.has('google_drive') : !!this.vault.get('googleTokens') || await exists('rclone.conf') },
       checks: this.checks, pendingMessages: this.handler.isBusy(), settingsRevision: this.store.get().revision,
     };
   }
@@ -137,7 +154,9 @@ export class BotRuntime {
       return this.checks[service] = { ok: true, message, checkedAt: new Date().toISOString() };
     } catch (error) {
       const messages = { github: '连接失败，请检查 Token 权限或已有 gh 登录。', drive: '连接失败，请检查 Google 授权、Drive API 或已有 rclone 登录。', model: '连接失败，请检查模型名、登录与额度。', ucloud: '连接失败，请重新登录学校账号。' };
-      return this.checks[service] = { ok: false, message: messages[service] || '连接失败。', checkedAt: new Date().toISOString() };
+      const config = this.store.get();
+      const native = service === 'drive' && config.drive.authMode === 'chatgpt' || service === 'github' && config.github.authMode === 'chatgpt';
+      return this.checks[service] = { ok: false, message: native ? 'ChatGPT 插件读取失败，请确认本机 Codex 使用同一账号且插件已连接。' : messages[service] || '连接失败。', checkedAt: new Date().toISOString() };
     }
   }
 }

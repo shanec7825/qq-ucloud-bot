@@ -20,13 +20,23 @@ npm.cmd run admin:open
 | 群组 | 读取 QQ 已加入群、添加/移除/备注、允许回复、每群历史归纳授权 |
 | 记忆 | 启用/停用、上下文条数和时效、长期记忆增删改、群摘要编辑/清空、最近上下文查看与清空 |
 
+### 直接复用 ChatGPT 插件
+
+GitHub 与 Drive 的“授权方式”都可选 **复用 ChatGPT 插件**。需要当前电脑的官方 Codex CLI 登录同一 ChatGPT 账号，且相应插件已连接；无需复制插件凭据或再填写 GitHub Token、Google OAuth 客户端。
+
+程序通过官方 Codex App Server 的只读 MCP 调用复用连接，只允许 Drive 搜索/文件夹列表/文本读取，以及 GitHub 仓库列表/文件读取，并检查工具的只读标记。桥接本身不创建模型回合；取得的相关内容才交给当前配置的回答模型。回答模型仍关闭工具权限。不会调用插件写入、删除、分享、发信等功能，也不会在插件失败时自动切换到另一账号的旧连接。
+
+本人私聊可以直接说“打开 Google Drive 里的‘课程内容.pdf’”“读取这个 Drive 链接”“读取第二个文件”，或提供 GitHub 文件链接。搜索遇到同名候选会返回列表，让你选定；选择按私聊保留 15 分钟，关闭记忆后不保留。Drive 文件问题不再因出现 PDF 字样误转到本机共享库。PDF 和 Google 文档使用插件返回的可读文本，正文最多提供 24000 字符；扫描件或插件不能解析的文件不能保证读取。
+
+私人插件读取仍仅允许主人私聊。群聊继续使用指定的本机共享教材目录及公开 UCloud 快照。首次插件连接需要初始化，可能等待数十秒；空闲 10 分钟后释放连接，后续自动重新连接。此功能依赖本机 Codex App Server 协议，版本不兼容时会明确报错。
+
 “保存并应用”对新的请求生效，修改 OneBot 设置会重新连接；机器人 QQ 的平台昵称与群名片需在 QQ 中单独修改。停用群或更换主人时，在途回答也会重新检查权限。未 @ 的群消息继续在模型入口前过滤。
 
 配置保存在忽略的 `data/settings.json`，首次从现有 `.env` 迁移，之后网页配置优先；修改 `.env` 不会覆盖已保存的网页设置。首次安装没有绑定账号或群组，可先使用管理台完成配置；UCloud 是可选模块，目前仅支持北邮教学云，关闭后仍可自然聊天。
 
 网页填写的连接密钥保存到 `data/secrets.enc.json`，不通过配置接口回显。Windows 使用当前用户 DPAPI；其他系统使用本机密钥文件和 AES-256-GCM，密钥文件与数据目录都需限制访问。已有 `.env`、gh、rclone 登录可继续沿用；显式清除密钥会阻止回退到旧环境值。学校密码仅用于本次认证，不保存。API 测试会发起一次请求，可能按所配服务计费。
 
-GitHub 可使用只授权指定仓库的细粒度 Token（Contents/Metadata 只读）。Google 新连接需要自己的 OAuth Client ID/Secret、启用 Drive API，并按网页显示登记回调地址，默认 `http://127.0.0.1:6100/oauth/google/callback`；使用 `state`、PKCE 与 `drive.readonly` 范围。未验证的自建客户端可能需要把本人加入测试用户。也可直接沿用已有本机登录，管理台会区分“已有配置”和“实际连接测试成功”。私人 Drive 支持目录、文本代码及可导出的 Google 文档，单文件最多 32KB。
+独立连接模式下，GitHub 可使用只授权指定仓库的细粒度 Token（Contents/Metadata 只读）。Google 独立 OAuth 连接需要自己的 Client ID/Secret、启用 Drive API，并按网页显示登记回调地址，默认 `http://127.0.0.1:6100/oauth/google/callback`；使用 `state`、PKCE 与 `drive.readonly` 范围。未验证的自建客户端可能需要把本人加入测试用户。也可沿用已有 gh/rclone 登录，管理台区分“已有配置”和“实际连接测试成功”。独立 Drive 路径支持目录、文本代码及可导出的 Google 文档，单文件最多 32KB；起始文件夹设置仅用于这些独立连接模式。
 
 长期记忆由管理员显式维护，支持全局、指定群、指定私聊；全局内容用于所有会话，私人资料应放在私聊范围。每次最多参考最近 20 条、共 6000 字符。最近对话仅在内存保存，重启或到期后清空；长期记忆和群摘要会持久保存。清空摘要不会重置历史归纳的调用频率限制，原始导出文件仍在本机。
 
@@ -209,3 +219,4 @@ node --env-file=.env scripts/export-dorm.mjs 群号
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)：协议适配；表情名称数据来源及许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 - [Codex CLI](https://github.com/openai/codex)、[rclone Drive](https://rclone.org/drive/)、[GitHub CLI](https://cli.github.com/manual/gh_auth_login)。
 - [Google OAuth 2.0](https://developers.google.com/identity/protocols/oauth2/web-server)、[桌面 OAuth 与 PKCE](https://developers.google.com/identity/protocols/oauth2/native-app)、[Drive files.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list)。
+- [Codex App Server](https://learn.chatgpt.com/docs/app-server)：官方 `app/list`、`mcpServerStatus/list` 和 `mcpServer/tool/call` 协议；本项目已真实验证复用连接读取 Drive 文件正文和 GitHub README。

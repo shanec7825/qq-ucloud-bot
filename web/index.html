@@ -52,7 +52,8 @@
           <div class="connection panel">
             <div class="service-heading"><span class="service-logo github" aria-hidden="true">G</span><div><h2>GitHub</h2><p>仓库目录、README 与文本文件</p></div><span class="badge" data-service-state="github">未检查</span></div>
             <label class="check"><input type="checkbox" data-setting="github.enabled">启用 GitHub 读取</label>
-            <div class="two-columns"><label>授权方式<select data-setting="github.authMode"><option value="existing">沿用本机 gh 登录</option><option value="token">使用我自己的 Token</option></select></label><label>默认仓库（可选）<input data-setting="github.defaultRepo" placeholder="owner/repository" maxlength="200"></label></div>
+            <div class="two-columns"><label>授权方式<select data-setting="github.authMode"><option value="chatgpt">复用 ChatGPT GitHub 插件</option><option value="existing">沿用本机 gh 登录</option><option value="token">使用我自己的 Token</option></select></label><label>默认仓库（可选）<input data-setting="github.defaultRepo" placeholder="owner/repository" maxlength="200"></label></div>
+            <p id="github-chatgpt-help" class="hint" hidden>直接使用本机 Codex 同一 ChatGPT 账号已连接的 GitHub 插件。只读取仓库与文件，不需要另填 GitHub Token。</p>
             <div id="github-token-options"><label>GitHub Token<input type="password" data-secret="githubToken" autocomplete="new-password"><span class="hint" data-secret-status="githubToken"></span></label><p class="hint">建议使用仅指定仓库、Contents 和 Metadata 只读权限的细粒度 Token。</p></div>
             <p id="github-existing-help" class="hint">使用项目 data/gh 中已有的授权。新设备可以选择 Token，直接在本页设置。</p>
             <div class="action-row"><button type="button" data-check="github">测试 GitHub</button><span id="check-github" class="hint"></span></div>
@@ -60,9 +61,10 @@
           <div class="connection panel">
             <div class="service-heading"><span class="service-logo drive" aria-hidden="true">D</span><div><h2>Google Drive</h2><p>只读连接你的云盘</p></div><span class="badge" data-service-state="drive">未检查</span></div>
             <label class="check"><input type="checkbox" data-setting="drive.enabled">启用 Google Drive 读取</label>
-            <label>授权方式<select data-setting="drive.authMode"><option value="existing">沿用本机 rclone 登录</option><option value="oauth">使用自己的 Google OAuth 客户端</option></select></label>
+            <label>授权方式<select data-setting="drive.authMode"><option value="chatgpt">复用 ChatGPT Google Drive 插件</option><option value="existing">沿用本机 rclone 登录</option><option value="oauth">使用自己的 Google OAuth 客户端</option></select></label>
+            <p id="drive-chatgpt-help" class="hint" hidden>复用本机 Codex 当前 ChatGPT 账号的 Drive 连接，可按名字搜索、打开链接和读取可解析的 PDF / Google 文档。无需另建 Google OAuth 客户端；首次连接可能需要等待。插件与独立 OAuth 的账号和可访问范围可能不同。</p>
             <div id="google-oauth-options"><div class="two-columns"><label>OAuth Client ID<input data-setting="drive.clientId" maxlength="250" placeholder="….apps.googleusercontent.com"></label><label>Client Secret<input data-secret="googleClientSecret" type="password" autocomplete="new-password"><span class="hint" data-secret-status="googleClientSecret"></span></label></div><p class="hint">在 Google Cloud 启用 Drive API，并创建 OAuth 客户端。网页应用类型需把下面地址登记为授权回调；仅申请 Drive 只读权限。</p><div class="copy-row"><code id="google-redirect"></code><button id="copy-redirect" type="button">复制回调地址</button></div><div class="action-row"><button id="google-authorize" type="button">在 Google 中授权</button></div><p class="hint">授权页会在浏览器中打开；未验证的自建应用可能需要把自己加入测试用户。</p></div>
-            <label>起始文件夹 ID（可选）<input data-setting="drive.rootFolderId" placeholder="留空为云盘根目录" maxlength="200"></label>
+            <label id="drive-root-option">起始文件夹 ID（可选）<input data-setting="drive.rootFolderId" placeholder="留空为云盘根目录" maxlength="200"></label>
             <p class="hint">这里是私人 Drive 连接。群内教材共享仍使用“机器人”页设置的本机教材目录。</p>
             <div class="action-row"><button type="button" data-check="drive">测试 Google Drive</button><span id="check-drive" class="hint"></span></div>
           </div>
