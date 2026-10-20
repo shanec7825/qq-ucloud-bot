@@ -4,6 +4,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { loginSchool } from './school-login.mjs';
 import { saveJSON } from './core.mjs';
 import { memoryScope } from './managed-memory.mjs';
+import { GROUP_TEMPLATES } from './group-templates.mjs';
 
 const staticFiles = new Map([['/', ['index.html', 'text/html; charset=utf-8']], ['/app.js', ['app.js', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]);
 const fail = (status, message) => { const error = new Error(message); error.status = status; throw error; };
@@ -64,7 +65,7 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (!['GET', 'HEAD'].includes(req.method) && !equal(req.headers['x-csrf-token'], session.csrf)) fail(403, '操作校验失效，请刷新管理台。');
       if (route === '/api/session' && req.method === 'GET') { json({ csrf: session.csrf }); return; }
       if (route === '/api/logout' && req.method === 'POST') { sessions.delete(token); json({ ok: true }, 200, { 'set-cookie': 'slyra_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' }); return; }
-      if (route === '/api/state' && req.method === 'GET') { json({ settings: store.get(), secrets: vault.flags(), status: await runtime.status(), googleRedirectURI: origin + '/oauth/google/callback' }); return; }
+      if (route === '/api/state' && req.method === 'GET') { json({ settings: store.get(), groupTemplates: GROUP_TEMPLATES, secrets: vault.flags(), status: await runtime.status(), googleRedirectURI: origin + '/oauth/google/callback' }); return; }
       if (route === '/api/runtime/stop' && req.method === 'POST') {
         runtime.stop(); res.once('finish', () => { server.close(); server.closeAllConnections(); }); json({ ok: true }); return;
       }

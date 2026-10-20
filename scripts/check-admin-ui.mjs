@@ -39,6 +39,13 @@ try {
   await page.locator('#discover-groups').click(); await page.locator('#group-discovery button').click();
   await page.locator('#save-settings').click(); await page.waitForFunction(() => document.querySelector('#save-state').textContent === '配置已保存');
   assert.equal(store.get().groups[0].id, '300000001'); assert.equal(store.get().groups[0].historyEnabled, false);
+  await page.locator('[data-group-template="300000001"]').selectOption('course');
+  await page.getByLabel('群 300000001 的补充提示词', { exact: true }).fill('只列最近截止的作业，附上原文依据。');
+  await page.locator('#save-settings').click(); await page.waitForFunction(() => document.querySelector('#save-state').textContent === '配置已保存');
+  assert.equal(store.get().groups[0].template, 'course'); assert.equal(store.get().groups[0].templatePrompt, '只列最近截止的作业，附上原文依据。');
+  await page.reload(); await page.locator('#shell').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('[data-group-template="300000001"]').inputValue(), 'course');
+  await page.screenshot({ path: fileURLToPath(new URL('../data/group-templates-desktop.png', import.meta.url)), fullPage: true });
   await page.locator('[data-tab="memory"]').click(); await page.locator('#note-scope option').first().waitFor({ state: 'attached' });
   await page.locator('[data-setting="memory.groupContext"]').uncheck();
   await page.locator('[data-setting="memory.groupContextLimit"]').fill('12');

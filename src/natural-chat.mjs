@@ -37,6 +37,7 @@ export async function routeNatural(text, event, deps) {
   try {
   const history = event.message_type === 'group' && deps.history ? await deps.history.context(String(event.group_id)) : null;
   const context = {
+    ...(event.message_type === 'group' && deps.groupTemplate ? { groupTemplate: deps.groupTemplate(String(event.group_id)) } : {}),
     mode: 'conversation', audience: event.message_type === 'group' ? 'QQ群' : isOwner ? '主人私聊' : '普通私聊',
     persona: persona.voice, conversation: deps.memory?.get(event) || [],
     currentMessage: { ...describe(event), text: question,

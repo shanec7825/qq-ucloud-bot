@@ -1,11 +1,11 @@
 #ifndef AppVersion
-  #define AppVersion "1.0.1"
+  #define AppVersion "1.1.0"
 #endif
 #ifndef AppFiles
-  #define AppFiles "..\release\1.0.1\win-x64"
+  #define AppFiles "..\release\1.1.0\win-x64"
 #endif
 #ifndef OutputDirectory
-  #define OutputDirectory "..\release\1.0.1"
+  #define OutputDirectory "..\release\1.1.0"
 #endif
 [Setup]
 AppId={{350A316B-2639-4E79-A652-9051E59E6685}

@@ -472,6 +472,12 @@ details.panel summary {
   padding:18px 0;
   border-top:1px solid #edf0f6
 }
+.group-card { border-top:1px solid var(--line, #edf0f6); padding:10px 0 24px; }
+.group-card:first-child { border-top:0; }
+.group-template-settings { display:grid; gap:10px; margin-top:8px; }
+.group-template-settings label { margin:0; }
+.group-template-settings .hint { margin:0; }
+.template-preview { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; font-size:13px; line-height:1.7; color:var(--muted); padding:12px 0; }
 .group-row:first-child {
   border-top:0
 }

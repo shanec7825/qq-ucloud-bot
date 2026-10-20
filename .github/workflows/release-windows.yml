@@ -8,6 +8,8 @@ on:
       - scripts/build-windows.mjs
       - scripts/prepare-desktop.mjs
       - scripts/audit-windows.mjs
+      - scripts/build-plugins.mjs
+      - scripts/check-plugin-package.mjs
       - .github/workflows/release-windows.yml
   workflow_dispatch:
 permissions:
@@ -31,7 +33,9 @@ jobs:
       - run: npm test
       - run: npm run desktop:prepare
       - run: npm run desktop:build
+      - run: npm run plugins:build
       - run: node scripts/audit-windows.mjs
+      - run: node scripts/check-plugin-package.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: windows-desktop
@@ -40,6 +44,8 @@ jobs:
             release/*/*.zip
             release/*/SHA256SUMS.txt
             release/*/release-audit.json
+            release/*/plugin-audit.json
+            release/*/plugins.json
           compression-level: 0
           retention-days: 7
   publish:

@@ -19,6 +19,16 @@ async function fixture(run) {
   try { await run(root); } finally { await rm(folder, { recursive: true, force: true }); }
 }
 
+test('通知报告在一次模型请求中选择场景，按选中场景只向指定私聊汇报', () => fixture(async root => {
+  const config = defaults({}); Object.assign(config.monitor, { enabled: true, groups: [group], notify: true, recipientQQ: '100000009' });
+  config.groups.push({ id: group, name: '活动群', template: 'auto', templatePrompt: '' });
+  let calls = 0; const sends = [];
+  const monitor = new NoticeMonitor({ settings: () => config, root, exporter: { export: async () => exported() }, ai: async (_question, context) => {
+    calls++; assert.equal(context.groupTemplate.selected, 'auto'); return JSON.stringify({ ...JSON.parse(result()), template: 'gaming' });
+  }, send: async (target, text) => sends.push({ target, text }) });
+  await monitor.run(); assert.equal(calls, 1); assert.equal((await monitor.reports())[0].template, 'gaming'); assert.match(sends[0].text, /组队与活动/); assert.deepEqual(sends[0].target, { user_id: '100000009' });
+}));
+
 test('监测样本校验来源群、过滤自己并脱敏；截止时间和引用必须有原文依据', () => {
   const samples = noticeSamples(exported(), group);
   assert.equal(samples.length, 1); assert.ok(!JSON.stringify(samples).includes('13800138000')); assert.ok(!JSON.stringify(samples).includes('SECRET')); assert.ok(!JSON.stringify(samples).includes('不发送姓名'));

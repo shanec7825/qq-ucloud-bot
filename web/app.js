@@ -160,14 +160,24 @@ function renderGroups() {
     inputName.value = group.name; inputName.placeholder = '未命名群组'; inputName.maxLength = 80; inputName.setAttribute('aria-label', '群 ' + group.id + ' 的备注名称');
     inputName.addEventListener('input', () => { group.name = inputName.value; markDirty(); }); name.append(inputName, element('small', group.id)); row.append(name);
     for (const [key, title] of [['enabled', '允许回复'], ['historyEnabled', '允许历史归纳']]) { const label = element('label', undefined, 'check'), input = element('input'); input.type = 'checkbox'; input.checked = group[key]; input.addEventListener('change', () => { group[key] = input.checked; markDirty(); }); label.append(input, document.createTextNode(title)); row.append(label); }
-    row.append(actionButton('移除', async () => { groups = groups.filter(g => g.id !== group.id); markDirty(); renderGroups(); }, 'danger-text')); list.append(row);
+    row.append(actionButton('移除', async () => { groups = groups.filter(g => g.id !== group.id); markDirty(); renderGroups(); }, 'danger-text'));
+    const card = element('article', undefined, 'group-card'), settings = element('div', undefined, 'group-template-settings');
+    const label = element('label', '群场景'), select = element('select'); select.setAttribute('aria-label', '群 ' + group.id + ' 的场景模板'); select.dataset.groupTemplate = group.id;
+    for (const template of state.groupTemplates || []) { const option = element('option', template.name); option.value = template.id; select.append(option); }
+    select.value = group.template || 'auto'; label.append(select);
+    const hint = element('p', undefined, 'hint'), preview = element('details'), previewText = element('pre', undefined, 'template-preview'); preview.append(element('summary', '查看模板和输出示例'), previewText);
+    const refreshTemplate = () => { const selected = (state.groupTemplates || []).find(item => item.id === select.value); hint.textContent = selected?.description || ''; previewText.textContent = select.value === 'auto' ? 'AI 会在本次回答中选择游戏群、年级群或课程群模板。\n普通闲聊自然回答；只有整理和起草事项时才采用结构化格式。\n不会为选择模板增加一次模型请求。' : [selected?.format || '自然回答，不套通知格式。', selected?.rules, selected?.example && '示例：' + selected.example].filter(Boolean).join('\n\n'); };
+    select.addEventListener('change', () => { group.template = select.value; markDirty(); refreshTemplate(); }); refreshTemplate();
+    const custom = element('label', '这个群的补充要求（可选）'), prompt = element('textarea'); prompt.rows = 2; prompt.maxLength = 2000; prompt.value = group.templatePrompt || ''; prompt.placeholder = '例如：活动时间用北京时间；作业汇总优先列最近截止事项。'; prompt.setAttribute('aria-label', '群 ' + group.id + ' 的补充提示词');
+    prompt.addEventListener('input', () => { group.templatePrompt = prompt.value; markDirty(); }); custom.append(prompt);
+    settings.append(label, hint, preview, custom); card.append(row, settings); list.append(card);
   }
 }
 function addGroup(id, name = '') {
   if (!/^\d{5,15}$/.test(id)) throw new Error('群号应为 5–15 位数字。');
   if (groups.some(g => g.id === id)) throw new Error('这个群已经在列表中。');
   if (groups.length >= 200) throw new Error('最多添加 200 个群。');
-  groups.push({ id, name, enabled: true, historyEnabled: false }); markDirty(); renderGroups();
+  groups.push({ id, name, enabled: true, historyEnabled: false, template: 'auto', templatePrompt: '' }); markDirty(); renderGroups();
 }
 const scopeName = scope => scope === 'global' ? '全局 · 所有会话可用' : scope.startsWith('group:') ? '群组 ' + (state.settings.groups.find(g => 'group:' + g.id === scope)?.name || scope.slice(6)) : '私聊 ' + scope.slice(8);
 function resetNote() { editingNote = undefined; $('#note-text').value = ''; $('#save-note').textContent = '添加记忆'; $('#cancel-note').hidden = true; }

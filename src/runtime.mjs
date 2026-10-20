@@ -18,6 +18,7 @@ import { GroupMembers } from './group-members.mjs';
 import { NoticeMonitor } from './notice-monitor.mjs';
 import { moduleActive } from './plugin-modules.mjs';
 import { CodexAccount } from './codex-account.mjs';
+import { groupTemplate } from './group-templates.mjs';
 
 const project = new URL('../', import.meta.url);
 export class BotRuntime {
@@ -86,7 +87,7 @@ export class BotRuntime {
     };
     return { enabled: !this.stopped && moduleActive(this.root, 'core'), capabilities: JSON.stringify([config.github.enabled, config.drive.enabled, config.school.enabled]), groups: enabled.filter(g => !config.monitor.groups.includes(g.id)).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
       resources: this.resources(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: this.media, members: this.members,
-      notes: config.memory.enabled ? this.notes : null, monitor: this.monitor,
+      notes: config.memory.enabled ? this.notes : null, monitor: this.monitor, groupTemplate: id => groupTemplate(config.groups.find(group => group.id === id)),
       history: config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
       persona: loadPersona, shareDocumentsWithModel: config.library.sendToModel, transportVersion: this.transportVersion,
     };

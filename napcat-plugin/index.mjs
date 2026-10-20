@@ -1,6 +1,6 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join, dirname } from 'node:path';
 import { AdminBridge, registerBridge } from './bridge.mjs';
 import { ensureEngine } from './engine.mjs';
 import { PLUGIN_MODULES, nativeConfigSchema } from './catalog.mjs';
@@ -19,11 +19,17 @@ export async function plugin_cleanup() { await activity(false); }
 
 export async function plugin_init(ctx) {
   const folder = fileURLToPath(new URL('.', import.meta.url));
-  const { projectRoot, pluginId, nodeBinary } = JSON.parse(await readFile(join(folder, 'deployment.json'), 'utf8'));
+  const descriptor = JSON.parse(await readFile(join(folder, 'deployment.json'), 'utf8'));
+  const pluginId = descriptor.pluginId;
+  let { projectRoot, nodeBinary } = descriptor;
+  if (descriptor.distribution === 1) {
+    const shared = await import(pathToFileURL(join(dirname(folder), 'napcat-plugin-qq-agent/bootstrap.mjs')));
+    ({ projectRoot, nodeBinary } = await shared.preparePortable(folder));
+  }
   const module = PLUGIN_MODULES.find(item => item.id === pluginId)?.module;
   if (!module) throw new Error('Unknown QQ Agent module');
   deployment = { projectRoot, module }; plugin_config_ui = nativeConfigSchema(pluginId);
-  if (typeof projectRoot !== 'string') throw new Error('Missing slyra project directory');
+  if (typeof projectRoot !== 'string') throw new Error('Missing QQ Agent project directory');
   try { await ensureEngine(projectRoot, nodeBinary); }
   catch { ctx.logger?.error?.('slyra 后台尚未就绪，请检查项目 data/napcat-engine.log 或运行 npm start。'); }
   registerBridge(ctx, new AdminBridge(projectRoot));

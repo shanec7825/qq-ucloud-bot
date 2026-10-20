@@ -20,6 +20,7 @@ const nodeFolder = join(root, 'tools/desktop/node/node-' + versions.node + '-win
 await copyFile(join(nodeFolder, 'node.exe'), join(app, 'runtime/node.exe')); await copyFile(join(nodeFolder, 'LICENSE'), join(app, 'runtime/LICENSE-Node.txt'));
 for (const name of ['README.md', 'README.Windows.md', 'THIRD_PARTY.md']) await copyFile(join(root, name), join(app, name));
 await copyFile(join(root, 'docs/CONFIGURATION.md'), join(app, 'docs/CONFIGURATION.md'));
+await copyFile(join(root, 'docs/PLUGIN-DISTRIBUTION.md'), join(app, 'docs/PLUGIN-DISTRIBUTION.md'));
 try { await copyFile(join(sdk, 'LICENSE.txt'), join(app, 'LICENSE-WebView2.txt')); } catch { throw new Error('WebView2 license missing'); }
 await copyFile(join(sdk, 'NOTICE.txt'), join(app, 'NOTICE-WebView2.txt'));
 const compiler = join(process.env.WINDIR || 'C:/Windows', 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'); await access(compiler);

@@ -1,4 +1,5 @@
 import { readJSON, saveJSON } from './core.mjs';
+import { templateIds } from './group-templates.mjs';
 
 export const DEFAULT_PROMPT = '自然随意地交流，可以幽默、接梗。根据问题决定详略；需要解释时把问题讲清楚。';
 const qq = value => typeof value === 'string' && /^\d{5,15}$/.test(value);
@@ -39,12 +40,14 @@ export function defaults(env = {}) {
     memory: { enabled: true, recentLimit: 16, ttlMinutes: 60, groupContext: true, groupContextLimit: 24 },
     history: { enabled: env.HISTORY_DIGEST_ENABLED === 'true' },
     monitor: { enabled: false, groups: [], intervalMinutes: 120, lookbackDays: 7, maxMessages: 200, notify: false, recipientQQ: '', focus: '考试、选课、报名、材料提交、截止时间、课程调整、奖助评优及重要活动。忽略闲聊、广告、重复转发和个人隐私。' },
-    groups: [...new Set(allowed)].map(id => ({ id, name: '', enabled: true, historyEnabled: history.includes(id) })),
+    groups: [...new Set(allowed)].map(id => ({ id, name: '', enabled: true, historyEnabled: history.includes(id), template: 'auto', templatePrompt: '' })),
   };
 }
 
 export function validateSettings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('配置必须是对象。');
+  input = structuredClone(input);
+  if (Array.isArray(input.groups)) input.groups = input.groups.map(group => group && typeof group === 'object' && !Array.isArray(group) ? { template: 'auto', templatePrompt: '', ...group } : group);
   const allowed = ['version', 'revision', 'groups', ...Object.keys(rules)];
   if (Object.keys(input).some(key => !allowed.includes(key)) || input.version !== 1 || !integer(input.revision, 0, Number.MAX_SAFE_INTEGER)) throw new Error('配置版本或字段无效。');
   for (const [section, fields] of Object.entries(rules)) {
@@ -52,7 +55,7 @@ export function validateSettings(input) {
     if (!values || typeof values !== 'object' || Object.keys(values).length !== Object.keys(fields).length || Object.keys(values).some(key => !fields[key])) throw new Error(`配置分区 ${section} 不完整。`);
     for (const [field, validate] of Object.entries(fields)) if (!validate(values[field])) throw new Error(`配置 ${section}.${field} 无效，请检查内容或范围。`);
   }
-  if (!Array.isArray(input.groups) || input.groups.length > 200 || input.groups.some(g => !g || Object.keys(g).sort().join() !== 'enabled,historyEnabled,id,name' || !qq(g.id) || !text(g.name, 80) || !bool(g.enabled) || !bool(g.historyEnabled)) || new Set(input.groups.map(g => g.id)).size !== input.groups.length) throw new Error('群号必须唯一且为 5–15 位数字，最多 200 个群。');
+  if (!Array.isArray(input.groups) || input.groups.length > 200 || input.groups.some(g => !g || Object.keys(g).sort().join() !== 'enabled,historyEnabled,id,name,template,templatePrompt' || !qq(g.id) || !text(g.name, 80) || !bool(g.enabled) || !bool(g.historyEnabled) || !templateIds.includes(g.template) || !text(g.templatePrompt, 2000)) || new Set(input.groups.map(g => g.id)).size !== input.groups.length) throw new Error('群号、场景模板或群提示词无效，群号必须唯一，最多 200 个群。');
   return structuredClone(input);
 }
 
