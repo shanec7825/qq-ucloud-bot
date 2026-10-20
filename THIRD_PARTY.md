@@ -14,6 +14,10 @@ The school CAS / UCloud request flow was checked against [byrdocs/bupt-auth](htt
 
 The group background window, sender identification and quote/mention reply design were checked against the official [AstrBot configuration documentation](https://docs.astrbot.app/en/dev/astrbot-config.html). The implementation here is independent JavaScript; no AstrBot source code is bundled. Prompt structure was checked against [OpenAI's prompt engineering guide](https://developers.openai.com/api/docs/guides/prompt-engineering).
 
+## NapCat configuration extension
+
+The integration uses the documented authenticated plugin router and extension-page APIs described in [NapCat's plugin WebUI guide](https://napneko.github.io/develop/plugin/start-webui). This repository ships its own bridge and shared settings frontend, not NapCat frontend assets. An explicitly selected local compatibility patch trusts only `napcat-plugin-slyra` and `napcat-plugin-slyra-monitor` in builds with a hardcoded official-plugin list; all other non-official plugin restrictions are preserved. NapCat's license is retained under `licenses/NapCat.txt`. The notice-monitor extension uses the separately installed QQ Chat Exporter plugin; no exporter implementation is bundled here.
+
 ## Runtime dependencies
 
 npm dependencies are listed in `package.json` and locked in `package-lock.json`; their own licenses apply. Optional NapCat, GitHub CLI, rclone, FFmpeg, Whisper packages and model files are installed separately under the ignored `tools/` directory. They are not included in this source repository.

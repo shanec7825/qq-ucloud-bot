@@ -7,6 +7,8 @@ export async function routeNatural(text, event, deps) {
   const isOwner = ownerPrivate(event, deps.owner);
   if (text.startsWith('/') && !text.startsWith('/AI ')) return routeCommand(text, event, deps);
   const question = text.replace(/^\/AI\s+/, '').trim();
+  const notices = await deps.monitor?.answer(question, event);
+  if (notices != null) return notices;
   if (!isOwner && privateIntent.test(question)) return '个人笔记、私人项目和其他目录不能在这里查；pdfs 里的教材课件和云邮作业都可以直接问。';
   let privateContent;
   const mentionsDrive = /(?:网盘|云盘|google\s*drive|谷歌|\bdrive\b|https:\/\/(?:docs|drive)\.google\.com)/iu;

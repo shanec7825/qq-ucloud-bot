@@ -16,6 +16,8 @@ async function body(request) {
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 export async function startAdmin({ store, vault, runtime, root = new URL('../data/', import.meta.url), port = 6100, login = loginSchool, now = Date.now }) {
+  let napcatOrigin;
+  try { const ui = JSON.parse(await readFile(new URL('napcat-ui.json', root), 'utf8')); if (/^http:\/\/127\.0\.0\.1:\d+$/.test(ui.origin)) napcatOrigin = ui.origin; } catch {}
   let accessKey;
   const keyFile = new URL('admin-access.key', root);
   try { accessKey = (await readFile(keyFile, 'utf8')).trim(); }
@@ -31,11 +33,12 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       // Binding to loopback plus an exact Host check prevents DNS rebinding.
       if (req.headers.host !== new URL(origin).host || !['127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) || !req.url.startsWith('/') || req.url.startsWith('//')) fail(403, '只允许本机管理地址。');
       const url = new URL(req.url, origin), route = url.pathname;
+      if (route === '/' && req.method === 'GET' && napcatOrigin) { res.writeHead(303, { location: napcatOrigin + '/webui/extension#' }); res.end(); return; }
       if (route === '/oauth/google/callback' && req.method === 'GET') {
         if (url.searchParams.has('error')) fail(400, 'Google 授权未完成，请返回管理台重试。');
         await runtime.google.complete(url.searchParams.get('state'), url.searchParams.get('code'), token => !!validSession(token));
         runtime.checks.drive = { ok: true, message: 'Google 只读授权已完成，请测试连接。', checkedAt: new Date().toISOString() };
-        res.writeHead(303, { location: '/#connections' }); res.end(); return;
+        res.writeHead(303, { location: napcatOrigin ? napcatOrigin + '/webui/extension#' : '/#connections' }); res.end(); return;
       }
       if (staticFiles.has(route) && req.method === 'GET') {
         const [file, type] = staticFiles.get(route); const bytes = await readFile(new URL('../web/' + file, import.meta.url));
@@ -88,6 +91,13 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (route === '/api/google/authorize' && req.method === 'POST') { json(runtime.google.begin(origin, token)); return; }
       if (/^\/api\/check\/(github|drive|ucloud|model)$/.test(route) && req.method === 'POST') { json(await runtime.check(route.split('/').at(-1))); return; }
       if (route === '/api/groups' && req.method === 'GET') { json({ groups: await runtime.groups() }); return; }
+      if (route === '/api/monitor' && req.method === 'GET') { json(await runtime.monitor.status()); return; }
+      if (route === '/api/monitor/run' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Object.keys(input).some(key => key !== 'groupId') || input.groupId !== undefined && !/^\d{5,15}$/.test(input.groupId)) fail(400, '监测群号无效。');
+        if (runtime.handler.isBusy()) fail(409, '正在处理聊天消息，请稍后整理。');
+        json(await runtime.monitor.run({ force: true, groupId: input.groupId })); return;
+      }
       if (route === '/api/memory' && req.method === 'GET') {
         const config = store.get(); const digests = await Promise.all(config.groups.map(async g => ({ groupId: g.id, name: g.name, digest: await runtime.notes.digest(g.id) })));
         json({ notes: await runtime.notes.list(), conversations: runtime.memory.list(), digests }); return;

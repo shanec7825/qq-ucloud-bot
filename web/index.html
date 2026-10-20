@@ -16,6 +16,7 @@
       <a href="#connections" data-tab="connections"><span class="nav-icon" aria-hidden="true">↔</span>服务连接</a>
       <a href="#groups" data-tab="groups"><span class="nav-icon" aria-hidden="true">▦</span>群组</a>
       <a href="#memory" data-tab="memory"><span class="nav-icon" aria-hidden="true">▤</span>记忆</a>
+      <a href="#monitor" data-tab="monitor"><span class="nav-icon" aria-hidden="true">◷</span>群通知整理</a>
     </nav>
     <div class="sidebar-bottom"><span class="local-indicator"></span><span>仅在这台电脑上运行</span><button id="logout" class="text-button">退出管理台</button></div>
   </aside>
@@ -28,7 +29,7 @@
           <div class="page-heading"><div><h1>让它成为你的机器人</h1><p>一个名字，一种表达方式。其他事，交给它处理。</p></div><div class="identity-orbit" aria-hidden="true"><span>s</span></div></div>
           <div class="panel">
             <div class="section-heading"><h2>身份</h2><p>名字会用于回答，QQ 群名片需在 QQ 中单独修改。</p></div>
-            <div class="two-columns"><label>机器人名字<input data-setting="bot.name" maxlength="40" required autocomplete="off"></label><label>主人 QQ<input data-setting="bot.ownerQQ" inputmode="numeric" pattern="[0-9]{5,15}" autocomplete="off"><span class="hint">只有这个账号的私聊能访问私人资料。</span></label></div>
+            <div class="two-columns"><label>机器人名字<input data-setting="bot.name" maxlength="40" required autocomplete="off"></label><label>主人 QQ（可选）<input data-setting="bot.ownerQQ" inputmode="numeric" pattern="[0-9]{5,15}" autocomplete="off"><span class="hint">普通群聊无需填写。需要私人 GitHub / Drive 时再指定，且只允许这个账号的私聊访问。UCloud 私聊提醒也使用此账号。</span></label></div>
             <label>系统提示词<textarea data-setting="bot.systemPrompt" rows="7" maxlength="12000" placeholder="描述它如何说话、处理问题，以及你希望它记住的回答原则。"></textarea></label><p class="hint">控制语气和回答方式；资料访问权限仍由程序控制。只对之后的请求生效。</p>
           </div>
           <div class="panel">
@@ -74,11 +75,25 @@
           <div class="panel"><div class="section-heading"><h2>允许响应的群</h2><p>机器人需先加入 QQ 群。群里可使用公开作业和共享教材，各群对话互相隔离。</p></div><div id="group-list"></div><div class="inline-add"><label>群号<input id="new-group-id" inputmode="numeric" placeholder="输入 QQ 群号"></label><label>备注名称<input id="new-group-name" maxlength="80" placeholder="方便你识别"></label><button id="add-group" type="button">添加群组</button></div><div class="action-row"><button id="discover-groups" type="button">从 QQ 读取已加入的群</button></div><div id="group-discovery"></div></div>
           <div class="panel"><div class="section-heading"><h2>历史背景</h2><p>普通群消息不会逐条交给模型。需要历史背景时，批量导出并归纳。</p></div><label class="check"><input type="checkbox" data-setting="history.enabled">启用定期历史归纳</label><p class="hint">还需在对应群勾选“允许历史归纳”。最多每 24 小时处理一次；新增文字不足 20 条不调用模型。最多发送 300 条脱敏样本给当前模型，API 模式按配置服务计费。需要本机 QQ Chat Exporter 插件。</p></div>
         </section>
+        <section data-view="monitor" hidden>
+          <div class="page-heading"><div><h1>把重要群通知留下来</h1><p>定期整理历史消息，关注截止时间与需要行动的事项。</p></div></div>
+          <div class="panel"><div class="section-heading"><h2>只读监测</h2><p>列入监测的群禁止机器人发言，包括 @ 回复。即使暂停定期整理，这条禁言保护也保留；移出列表后才恢复普通群规则。</p></div>
+            <label class="check"><input type="checkbox" data-setting="monitor.enabled">启用定期群通知整理</label>
+            <label>监测群号<textarea id="monitor-group-ids" rows="2" placeholder="每行一个群号，最多 20 个"></textarea></label>
+            <div class="action-row"><button id="discover-monitor-groups" type="button">选择已加入的 QQ 群</button></div><div id="monitor-discovery"></div>
+            <div class="two-columns"><label>检查间隔（分钟）<input type="number" data-setting="monitor.intervalMinutes" min="15" max="10080" required></label><label>历史范围（天）<input type="number" data-setting="monitor.lookbackDays" min="1" max="30" required></label></div>
+            <label>每次最多分析的最近文字消息<input type="number" data-setting="monitor.maxMessages" min="20" max="500" required></label>
+            <label>关注哪些信息<textarea data-setting="monitor.focus" rows="3" maxlength="2000"></textarea></label>
+            <p class="hint">使用本机 QQ Chat Exporter 导出 QQ 能读取到的历史。启用后会把新文字样本发给当前模型；自动移除电话、邮箱和常见凭据，不发送发言者身份。每群每次至多一次模型请求、约 3 万字；没有新文字不调用模型。图片、语音和文件正文不在此批量整理范围内。历史过多时仅分析设定条数内的最近消息，可能遗漏更早的通知。</p>
+          </div>
+          <div class="panel"><div class="section-heading"><h2>报告送到哪里</h2><p>所有报告保存在本页，可查看消息原文片段。私聊汇报独立于主人 QQ。</p></div><label class="check"><input type="checkbox" data-setting="monitor.notify">同时通过 QQ 私聊发送报告</label><label>接收 QQ（可选）<input data-setting="monitor.recipientQQ" inputmode="numeric" pattern="[0-9]{5,15}" placeholder="留空则仅保存在后台"></label><p class="hint">接收人可直接私聊问“最近有什么”“历史记录有什么”，无需命令，也不需要主人权限。查询已有报告不调用模型。接收人通常需先添加机器人为好友。发送失败会标在报告中；不会改发到群里。换机器人 QQ 后，需重新选择它已加入的群并确认接收人。</p></div>
+        </section>
         <section data-view="memory" hidden>
           <div class="page-heading"><div><h1>决定它记住什么</h1><p>管理长期记忆、群历史摘要和最近的对话上下文。</p></div></div>
           <div class="panel"><div class="section-heading"><h2>记忆方式</h2></div><label class="check"><input type="checkbox" data-setting="memory.enabled">在回答中使用记忆</label><div class="two-columns"><label>最近上下文条数<input type="number" data-setting="memory.recentLimit" min="2" max="40" required></label><label>上下文保留时间（分钟）<input type="number" data-setting="memory.ttlMinutes" min="1" max="1440" required></label></div><label class="check"><input type="checkbox" data-setting="memory.groupContext">@ 时结合近期群聊背景</label><label>群聊背景条数<input type="number" data-setting="memory.groupContextLimit" min="2" max="60" required></label><p class="hint">普通群消息只暂存在本机内存，最多 15 分钟；@ 时才发送有限文字给模型，不逐条分析、不下载普通消息的附件。关闭记忆会清空最近对话和背景；长期笔记与摘要仍可管理。</p></div>
         </section>
       </form>
+      <div id="monitor-tools" hidden><div class="panel"><div class="section-heading"><h2>重要信息收件箱</h2><p>自动归纳可能出错，请结合原文确认具体要求与日期。最多保留 100 份报告。</p></div><div class="action-row"><button id="run-monitor" type="button">立即整理已保存的监测群</button><button id="refresh-monitor" type="button">刷新报告</button></div><p id="monitor-status" class="hint"></p><div id="notice-reports"></div></div></div>
       <div id="memory-tools" hidden>
         <div class="panel"><div class="section-heading"><h2>长期记忆</h2><p>由你添加和编辑，重启后依然保留。全局记忆会用于所有会话。</p></div><form id="note-form"><label>可见范围<select id="note-scope"></select></label><label>记忆内容<textarea id="note-text" rows="3" maxlength="2000" required placeholder="例如：回答教材问题时先给直观例子，再写正式定义。"></textarea></label><div class="action-row"><button class="secondary" type="submit" id="save-note">添加记忆</button><button type="button" id="cancel-note" hidden>取消编辑</button></div></form><div id="note-list"></div></div>
         <div class="panel"><div class="section-heading"><h2>群历史摘要</h2><p>可修订或清空当前摘要；原始导出文件仍只保存在本机。</p></div><label>群组<select id="digest-group"></select></label><label>摘要<textarea id="digest-text" rows="5" maxlength="1000"></textarea></label><p id="digest-meta" class="hint"></p><div class="action-row"><button id="save-digest" type="button">保存摘要</button><button id="clear-digest" type="button" class="danger-text">清空摘要</button></div></div>

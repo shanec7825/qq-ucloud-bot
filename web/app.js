@@ -1,11 +1,19 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 let state, csrf, dirty = false, groups = [], memories, editingNote, saving = false;
-const titles = { bot: '机器人', connections: '服务连接', groups: '群组', memory: '记忆' };
+const inNapcat = document.body.dataset.napcat === 'true';
+const pluginId = document.body.dataset.plugin === 'napcat-plugin-slyra-monitor' ? 'napcat-plugin-slyra-monitor' : 'napcat-plugin-slyra';
+const monitorOnly = inNapcat && pluginId === 'napcat-plugin-slyra-monitor';
+const titles = { bot: '机器人', connections: '服务连接', groups: '群组', memory: '记忆', monitor: '群通知整理' };
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 function notice(message, error = false) { let box = $('#feedback'); if ($('#shell').hidden) { box = $('#login-feedback'); if (!box) { box = element('p', undefined, 'feedback'); box.id = 'login-feedback'; box.setAttribute('role', 'status'); $('#login').append(box); } } box.textContent = message; box.classList.toggle('error', error); box.hidden = false; if (error) box.scrollIntoView({ block: 'nearest', behavior: 'instant' }); }
 async function api(path, method = 'GET', value) {
-  const response = await fetch('/api/' + path, { method, headers: { ...(value !== undefined ? { 'content-type': 'application/json' } : {}), ...(csrf ? { 'x-csrf-token': csrf } : {}) }, ...(value !== undefined ? { body: JSON.stringify(value) } : {}) });
+  let response;
+  if (inNapcat) {
+    let credential; try { credential = JSON.parse(localStorage.getItem('token') || 'null'); } catch {}
+    if (typeof credential !== 'string' || !credential) throw new Error('请先在 NapCat 登录，再打开 slyra 设置。');
+    response = await fetch('/api/Plugin/ext/' + pluginId + '/bridge', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + credential }, body: JSON.stringify({ method, path, ...(value !== undefined ? { value } : {}) }) });
+  } else response = await fetch('/api/' + path, { method, headers: { ...(value !== undefined ? { 'content-type': 'application/json' } : {}), ...(csrf ? { 'x-csrf-token': csrf } : {}) }, ...(value !== undefined ? { body: JSON.stringify(value) } : {}) });
   const data = await response.json();
   if (!response.ok) { if (response.status === 401 && path !== 'session') showLogin(); throw new Error(data.error || '操作失败，请重试。'); }
   return data;
@@ -22,6 +30,7 @@ function dependencies() {
 }
 function fillSettings() {
   groups = structuredClone(state.settings.groups);
+  $('#monitor-group-ids').value = state.settings.monitor.groups.join('\n');
   for (const field of $$('[data-setting]')) { const [section, key] = field.dataset.setting.split('.'); if (field.type === 'checkbox') field.checked = state.settings[section][key]; else field.value = state.settings[section][key]; }
   for (const field of $$('[data-secret]')) field.value = '';
   for (const hint of $$('[data-secret-status]')) {
@@ -41,6 +50,7 @@ function fillSettings() {
 function draft() {
   const value = structuredClone(state.settings);
   for (const field of $$('[data-setting]')) { const [section, key] = field.dataset.setting.split('.'); value[section][key] = field.type === 'checkbox' ? field.checked : field.type === 'number' ? Number(field.value) : field.value; }
+  value.monitor.groups = [...new Set($('#monitor-group-ids').value.split(/[\s,，]+/).filter(Boolean))];
   value.groups = groups; return value;
 }
 async function save() {
@@ -73,17 +83,56 @@ function renderStatus() {
   }
   const model = status.checks.model; if (model) $('#check-model').textContent = model.message;
 }
-function showLogin() { $('#shell').hidden = true; $('#login').hidden = false; }
+function showLogin() {
+  $('#shell').hidden = true; $('#login').hidden = false;
+  if (inNapcat) { $('#login-form').hidden = true; $('#login h1').textContent = '请先登录 NapCat'; $('#login p').textContent = '登录 NapCat 后，从扩展页面打开 slyra 设置，无需第二次登录。'; }
+}
 async function enter() { state = await api('state'); fillSettings(); $('#login').hidden = true; $('#shell').hidden = false; navigate(false); }
 function navigate(focus = true) {
-  const tab = Object.hasOwn(titles, location.hash.slice(1)) ? location.hash.slice(1) : 'bot';
+  const tab = monitorOnly ? 'monitor' : Object.hasOwn(titles, location.hash.slice(1)) ? location.hash.slice(1) : 'bot';
   for (const section of $$('[data-view]')) section.hidden = section.dataset.view !== tab;
   $('#memory-tools').hidden = tab !== 'memory'; $('#page-label').textContent = titles[tab];
+  $('#monitor-tools').hidden = tab !== 'monitor';
   for (const link of $$('[data-tab]')) { if (link.dataset.tab === tab) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }
   if (tab === 'memory' && state) loadMemory().catch(error => notice(error.message, true));
+  if (tab === 'monitor' && state) loadMonitor().catch(error => notice(error.message, true));
   if (focus) $('#main').focus({ preventScroll: true });
 }
 function actionButton(text, work, className) { const button = element('button', text, className); button.type = 'button'; button.addEventListener('click', () => busy(button, work)); return button; }
+async function loadMonitor() {
+  const data = await api('monitor'), list = $('#notice-reports'); list.replaceChildren();
+  const names = { reading: '读取中', unchanged: '无新文字', updated: '已生成报告', no_important_info: '未发现重要通知', failed: '导出或模型失败' };
+  $('#monitor-status').textContent = data.running ? '正在整理，请稍后刷新。' : Object.entries(data.state).filter(([id]) => state.settings.monitor.groups.includes(id)).map(([id, row]) => '群 ' + id + '：' + (names[row.status] || row.status) + ' · 模型调用 ' + (row.modelCalls || 0) + ' 次').join('；') || '还没有整理记录。请先选择监测群并保存。';
+  if (!data.reports.length) list.append(element('p', '暂无重要信息报告。', 'empty'));
+  const delivery = { web: '保存在后台', private_sent: '已发 QQ 私聊', private_failed: '私聊发送失败，请在本页查看' };
+  for (const report of data.reports) {
+    const card = element('article', undefined, 'panel'); card.append(element('h3', report.groupName), element('p', new Date(report.createdAt).toLocaleString('zh-CN') + ' · ' + (delivery[report.delivery] || '保存在后台'), 'hint'));
+    for (const item of report.items) {
+      card.append(element('h4', (item.priority === 'urgent' ? '紧急 · ' : '') + item.title), element('p', item.summary));
+      if (item.deadlineText) card.append(element('p', '截止时间原文：' + item.deadlineText));
+      const detail = element('details'); detail.append(element('summary', '查看依据'));
+      for (const source of item.sources) detail.append(element('blockquote', source.time + ' · ' + source.excerpt));
+      card.append(detail);
+    }
+    list.append(card);
+  }
+}
+$('#refresh-monitor').addEventListener('click', () => busy($('#refresh-monitor'), loadMonitor));
+$('#run-monitor').addEventListener('click', () => busy($('#run-monitor'), async () => {
+  if (dirty) throw new Error('请先保存监测配置。');
+  const result = await api('monitor/run', 'POST', {}); await loadMonitor();
+  const status = { disabled: '请先启用并保存群通知整理。', no_groups: '请先选择并保存监测群。', busy: '已有整理任务正在进行。' };
+  const outcomes = { updated: '已生成报告', unchanged: '没有新文字', no_important_info: '没有重要通知', not_due: '间隔不足一分钟', failed: '导出或模型失败', cancelled: '配置变更，已取消' };
+  notice(status[result.status] || result.results.map(row => '群 ' + row.groupId + '：' + (outcomes[row.status] || row.status)).join('；'));
+}));
+$('#discover-monitor-groups').addEventListener('click', () => busy($('#discover-monitor-groups'), async () => {
+  const data = await api('groups'), list = $('#monitor-discovery'); list.replaceChildren();
+  for (const group of data.groups) list.append(actionButton(group.name + ' · ' + group.id, async () => {
+    const selected = new Set($('#monitor-group-ids').value.split(/[\s,，]+/).filter(Boolean)); selected.add(group.id);
+    $('#monitor-group-ids').value = [...selected].join('\n'); markDirty(); notice('已加入只读监测列表，请保存以应用禁言保护。');
+  }));
+  if (!data.groups.length) list.append(element('p', 'QQ 没有返回已加入的群。', 'empty'));
+}));
 function renderGroups() {
   const list = $('#group-list'); list.replaceChildren();
   if (!groups.length) list.append(element('p', '尚未允许任何群。添加群号并保存后，机器人即可在该群被 @ 时回复。', 'empty'));
@@ -156,6 +205,17 @@ $('#clear-conversations').addEventListener('click', () => busy($('#clear-convers
 window.addEventListener('hashchange', () => navigate());
 window.addEventListener('beforeunload', event => { if (dirty || $('#note-text').value.trim()) { event.preventDefault(); event.returnValue = ''; } });
 async function bootstrap() {
+  if (inNapcat) {
+    document.body.classList.add('napcat-embedded');
+    if (monitorOnly) document.body.classList.add('monitor-only');
+    try {
+      const source = getComputedStyle(parent.document.documentElement);
+      for (const name of ['primary', 'background', 'foreground', 'default-100', 'default-200', 'default-500']) {
+        const value = source.getPropertyValue('--heroui-' + name).trim(); if (/^[\d.%\s]+$/.test(value)) document.documentElement.style.setProperty('--nc-' + name, value);
+      }
+      document.documentElement.dataset.theme = parent.document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    } catch {}
+  }
   const key = new URLSearchParams(location.hash.slice(1)).get('key');
   if (key) history.replaceState(null, '', '/#bot');
   try { const session = key ? await api('session', 'POST', { key }) : await api('session'); csrf = session.csrf; await enter(); }

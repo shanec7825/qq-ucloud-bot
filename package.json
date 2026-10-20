@@ -1,6 +1,6 @@
 {
   "name": "bupt-qq-homework-bot",
-  "version": "0.6.1",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -22,6 +22,7 @@
     "login:school": "node scripts/login-school.mjs",
     "history:tick": "node --env-file=.env scripts/history-tick.mjs",
     "admin:open": "node scripts/open-admin.mjs",
+    "napcat:install": "node scripts/install-napcat.mjs",
     "test:ui": "node scripts/check-admin-ui.mjs"
   },
   "optionalDependencies": {

@@ -8,7 +8,7 @@ import { scrubSample } from './persona.mjs';
 
 export class QceExporter {
   constructor(fetcher = fetch) { this.fetcher = fetcher; }
-  async export(groupId, folder) {
+  async export(groupId, folder, { lookbackDays = 7 } = {}) {
     if (!/^\d{5,15}$/.test(groupId)) throw new Error('无效历史群号');
     await mkdir(folder, { recursive: true });
     const security = JSON.parse(await readFile(join(process.env.USERPROFILE, '.qq-chat-exporter', 'security.json'), 'utf8'));
@@ -23,7 +23,7 @@ export class QceExporter {
     };
     const task = await call('/api/messages/export', {
       peer: { chatType: 2, peerUid: groupId }, sessionName: 'group-' + groupId, format: 'JSON',
-      filter: { startTime: Math.floor(Date.now() / 1000) - 7 * 86400, includeRecalled: false, includeSystem: false },
+      filter: { startTime: Math.floor(Date.now() / 1000) - Math.max(1, Math.min(30, lookbackDays)) * 86400, includeRecalled: false, includeSystem: false },
       options: { outputDir: fileURLToPath(folder), batchSize: 1000, prettyFormat: true, includeResourceLinks: false, includeSystemMessages: false, skipDownloadResourceTypes: ['image', 'video', 'audio', 'file', 'avatar', 'sticker'], embedAvatarsAsBase64: false },
     });
     const path = resolve(task.filePath || join(fileURLToPath(folder), task.fileName || ''));

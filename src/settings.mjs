@@ -19,6 +19,9 @@ const rules = {
   library: { root: v => text(v, 1000), sendToModel: bool },
   memory: { enabled: bool, recentLimit: v => integer(v, 2, 40), ttlMinutes: v => integer(v, 1, 1440), groupContext: bool, groupContextLimit: v => integer(v, 2, 60) },
   history: { enabled: bool },
+  monitor: { enabled: bool, groups: v => Array.isArray(v) && v.length <= 20 && v.every(qq) && new Set(v).size === v.length,
+    intervalMinutes: v => integer(v, 15, 10080), lookbackDays: v => integer(v, 1, 30), maxMessages: v => integer(v, 20, 500),
+    notify: bool, recipientQQ: v => v === '' || qq(v), focus: v => text(v, 2000) },
 };
 
 export function defaults(env = {}) {
@@ -35,6 +38,7 @@ export function defaults(env = {}) {
     library: { root: env.SHARED_PDFS_ROOT || '', sendToModel: env.SHARED_DOCUMENTS_TO_MODEL === 'true' },
     memory: { enabled: true, recentLimit: 16, ttlMinutes: 60, groupContext: true, groupContextLimit: 24 },
     history: { enabled: env.HISTORY_DIGEST_ENABLED === 'true' },
+    monitor: { enabled: false, groups: [], intervalMinutes: 120, lookbackDays: 7, maxMessages: 200, notify: false, recipientQQ: '', focus: '考试、选课、报名、材料提交、截止时间、课程调整、奖助评优及重要活动。忽略闲聊、广告、重复转发和个人隐私。' },
     groups: [...new Set(allowed)].map(id => ({ id, name: '', enabled: true, historyEnabled: history.includes(id) })),
   };
 }
@@ -56,7 +60,9 @@ export class SettingsStore {
   constructor(file = new URL('../data/settings.json', import.meta.url), env = process.env) { this.file = file; this.env = env; this.queue = Promise.resolve(); }
   async load() {
     const saved = await readJSON(this.file, null);
-    const migrated = saved && saved.memory && saved.memory.groupContext === undefined && saved.memory.groupContextLimit === undefined ? { ...saved, memory: { ...saved.memory, groupContext: true, groupContextLimit: 24 } } : saved;
+    let migrated = saved;
+    if (saved && saved.memory && saved.memory.groupContext === undefined && saved.memory.groupContextLimit === undefined) migrated = { ...migrated, memory: { ...saved.memory, groupContext: true, groupContextLimit: 24 } };
+    if (migrated && !Object.hasOwn(migrated, 'monitor')) migrated = { ...migrated, monitor: defaults({}).monitor };
     this.value = validateSettings(migrated || defaults(this.env));
     if (!saved || migrated !== saved) await saveJSON(this.file, this.value);
     return this.get();

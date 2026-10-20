@@ -1,0 +1,10 @@
+{
+  "name": "napcat-plugin-slyra",
+  "plugin": "slyra 机器人配置",
+  "version": "0.8.0",
+  "description": "在 NapCat 中管理模型、提示词、群组、记忆、UCloud、GitHub 与 Google Drive。",
+  "type": "module",
+  "main": "index.mjs",
+  "author": "slyra",
+  "napcat": { "minVersion": "4.14.0" }
+}
