@@ -1,0 +1,10 @@
+.env
+data/
+node_modules/
+tools/
+*.log
+qrcode.png
+.env.*
+!.env.example
+__pycache__/
+*.pyc
