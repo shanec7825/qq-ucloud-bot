@@ -26,7 +26,7 @@ test('local trust exception affects only installed agent modules and retains sen
   assert.throws(() => trustAgentPlugins(previous.replace('napcat-plugin-slyra-monitor', 'napcat-plugin-other')));
 });
 
-test('module configuration opens in the native plugin card without registering extension pages', () => {
+test('native plugin card remains available alongside extension pages', () => {
   assert.equal(PLUGIN_MODULES.length, 5);
   for (const plugin of PLUGIN_MODULES) {
     const schema = nativeConfigSchema(plugin.id);
@@ -35,6 +35,17 @@ test('module configuration opens in the native plugin card without registering e
     assert.doesNotMatch(JSON.stringify(schema), /iframe|<style|\/files\/ui/);
   }
   assert.throws(() => nativeConfigSchema('untrusted'));
+});
+
+test('extension config rejects cross-origin requests and only saves explicitly', async () => {
+  const handlers = new Map(); let saves = 0;
+  const adapter = { getConfig:async () => ({ _session:'fixture',page:'bot' }), schema:() => [], setConfig:async () => { saves++; return { ok:true }; } };
+  registerBridge({ router:{ post:(path,handler) => handlers.set(path,handler) } }, {}, adapter);
+  const response = () => ({ code:200, setHeader(){}, status(code){ this.code=code; return this; }, json(data){ this.data=data; } });
+  const run = async (operation,origin='http://127.0.0.1:6099') => { const res=response(); await handlers.get('/settings-ui')({ headers:{host:'127.0.0.1:6099',origin},body:{operation} },res); return res; };
+  assert.equal((await run('load','https://evil.test')).code,403);
+  assert.equal((await run('load')).data.config.page,'bot'); await run('schema'); assert.equal(saves,0);
+  assert.equal((await run('unknown')).code,400); assert.equal((await run('save')).data.ok,true); assert.equal(saves,1);
 });
 
 test('NapCat bridge restricts methods and paths; never proxies arbitrary URLs or sessions', () => {

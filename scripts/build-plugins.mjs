@@ -13,6 +13,7 @@ const manifest = JSON.parse(await readFile(join(root, 'napcat-plugin/package.jso
 for (const plugin of PLUGIN_MODULES) {
   const files = {};
   for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs', 'native-config.mjs']) files[name] = new Uint8Array(await readFile(join(root, 'napcat-plugin', name)));
+  for (const name of ['index.html', 'app.js', 'style.css']) files['webui/' + name] = new Uint8Array(await readFile(join(root, 'napcat-plugin/webui', name)));
   files['package.json'] = Buffer.from(JSON.stringify({ ...manifest, name: plugin.id, plugin: plugin.name, description: plugin.description, version: pkg.version, homepage: 'https://github.com/shanec7825/qq-ucloud-bot', napcat: { ...manifest.napcat, tags: ['AI', '工具'] } }, null, 2));
   files['deployment.json'] = Buffer.from(JSON.stringify({ distribution: 1, pluginId: plugin.id }));
   files['README.md'] = new Uint8Array(await readFile(join(root, 'docs/PLUGIN-DISTRIBUTION.md')));

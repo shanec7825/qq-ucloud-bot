@@ -37,7 +37,9 @@ export async function plugin_init(ctx) {
   catch { ctx.logger?.error?.('slyra 后台尚未就绪，请检查项目 data/napcat-engine.log 或运行 npm start。'); }
   const bridge = new AdminBridge(projectRoot);
   native = createNativeConfigAdapter({ module, bridge });
-  registerBridge(ctx, bridge);
+  registerBridge(ctx, bridge, native);
+  ctx.router.static('/ui', 'webui');
+  ctx.router.page({ title: PLUGIN_MODULES.find(item => item.id === pluginId).name, path: 'settings', htmlFile: 'webui/index.html', description: '分类管理设置、账号、人格与记忆' });
 
   await activity(true);
   ctx.logger?.info?.('模块配置已接入 NapCat 插件卡片。');

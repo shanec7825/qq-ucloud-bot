@@ -41,7 +41,7 @@ export class AdminBridge {
   }
 }
 
-export function registerBridge(ctx, bridge) {
+export function registerBridge(ctx, bridge, adapter) {
   // Authenticated NapCat API only. Never register a NoAuth management route.
   ctx.router.post('/bridge', async (req, res) => {
     res.setHeader('cache-control', 'no-store');
@@ -55,5 +55,16 @@ export function registerBridge(ctx, bridge) {
       const result = await bridge.request(method, path, value);
       res.status(result.status).json(result.data);
     } catch { res.status(503).json({ error: '机器人服务未连接，请确认 slyra 服务正在运行后重试。' }); }
+  });
+  if (adapter) ctx.router.post('/settings-ui', async (req, res) => {
+    res.setHeader('cache-control', 'no-store');
+    try {
+      if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return res.status(403).json({ error: '请在 NapCat 页面操作。' });
+      const { operation, config } = req.body || {};
+      if (operation === 'load') { const value = await adapter.getConfig(); return res.json({ config: value, schema: adapter.schema(value) }); }
+      if (operation === 'schema') return res.json({ schema: adapter.schema(config) });
+      if (operation === 'save') return res.json(await adapter.setConfig(config));
+      res.status(400).json({ error: '无效操作。' });
+    } catch (error) { res.status(400).json({ error: error.message || '设置载入失败，请重试。' }); }
   });
 }

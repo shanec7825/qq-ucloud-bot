@@ -27,6 +27,8 @@ const template = JSON.parse(await readFile(join(projectRoot, 'napcat-plugin/pack
 for (const plugin of PLUGIN_MODULES) {
   const target = join(pluginsRoot, plugin.id); await mkdir(target, { recursive: true });
   for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs', 'native-config.mjs']) await copyFile(join(projectRoot, 'napcat-plugin', name), join(target, name));
+  await mkdir(join(target, 'webui'), { recursive: true });
+  for (const name of ['index.html', 'app.js', 'style.css']) await copyFile(join(projectRoot, 'napcat-plugin/webui', name), join(target, 'webui', name));
   await writeFile(join(target, 'package.json'), JSON.stringify({ ...template, name: plugin.id, plugin: plugin.name, description: plugin.description }, null, 2));
   await writeFile(join(target, 'deployment.json'), JSON.stringify({ projectRoot, pluginId: plugin.id, nodeBinary: process.execPath }), { mode: 0o600 });
 }
