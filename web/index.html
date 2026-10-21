@@ -1,32 +1,26 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>slyra 管理台</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QQ Agent 工作台</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
 <body>
 <a class="skip" href="#main">跳到设置内容</a>
 <div id="login" class="login" hidden>
-  <div class="mark" aria-hidden="true">s</div><h1>打开你的机器人工作台</h1><p>这是运行在本机的管理页面。使用启动链接，或输入本机管理密钥。</p>
+  <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="3"/><path d="M12 2v4M8 12h.01M16 12h.01M8 16h8"/></svg></div><h1>打开你的机器人工作台</h1><p>这是运行在本机的管理页面。使用启动链接，或输入本机管理密钥。</p>
   <form id="login-form"><label for="admin-key">管理密钥</label><input id="admin-key" type="password" autocomplete="current-password" required><button class="primary" type="submit">进入管理台</button></form>
   <p class="hint">忘记入口？在项目目录运行 <code>npm run admin:open</code>。</p>
 </div>
 <div id="shell" class="shell" hidden>
   <aside class="sidebar">
-    <a class="brand" href="#bot"><span class="mark" aria-hidden="true">s</span><span><strong id="brand-name">slyra</strong><small>机器人工作台</small></span></a>
-    <nav aria-label="设置导航">
-      <a href="#bot" data-tab="bot"><span class="nav-icon" aria-hidden="true">◈</span>机器人</a>
-      <a href="#connections" data-tab="connections"><span class="nav-icon" aria-hidden="true">↔</span>服务连接</a>
-      <a href="#groups" data-tab="groups"><span class="nav-icon" aria-hidden="true">▦</span>群组</a>
-      <a href="#memory" data-tab="memory"><span class="nav-icon" aria-hidden="true">▤</span>记忆</a>
-      <a href="#monitor" data-tab="monitor"><span class="nav-icon" aria-hidden="true">◷</span>群通知整理</a>
-    </nav>
+    <a class="brand" href="#bot"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="3"/><path d="M12 2v4M8 12h.01M16 12h.01M8 16h8"/></svg></span><span><strong>QQ Agent</strong><small id="brand-name">机器人工作台</small></span></a>
+    <nav aria-label="设置导航"><a href="#bot" data-tab="bot"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="3"/><path d="M12 2v4M8 12h.01M16 12h.01M8 16h8"/></svg></span>机器人</a><a href="#groups" data-tab="groups"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg></span>群组</a><a href="#memory" data-tab="memory"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span>记忆</a><a href="#monitor" data-tab="monitor"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4zM4 14h5l2 3h2l2-3h5M8 8h8"/></svg></span>消息整理</a><a href="#customization" data-tab="customization"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3" fill="var(--surface)"/><circle cx="16" cy="17" r="3" fill="var(--surface)"/></svg></span>自定义</a><a href="#connections" data-tab="connections"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0) scale(.9)"/></svg></span>服务连接</a></nav>
     <div class="sidebar-bottom"><span class="local-indicator"></span><span>仅在这台电脑上运行</span><button id="logout" class="text-button">退出管理台</button></div>
   </aside>
   <div class="workspace">
-    <header><div><span class="eyebrow">我的机器人</span><span class="header-separator">/</span><span id="page-label">机器人</span></div><span id="qq-status" class="badge">检查连接中</span></header>
+    <header><div><span class="eyebrow">工作台</span><span class="header-separator">/</span><span id="page-label">机器人</span></div><span id="qq-status" class="badge">检查连接中</span></header>
     <main id="main" tabindex="-1">
       <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
       <form id="settings-form" novalidate>
         <section data-view="bot">
-          <div class="page-heading"><div><h1>让它成为你的机器人</h1><p>一个名字，一种表达方式。其他事，交给它处理。</p></div><div class="identity-orbit" aria-hidden="true"><span>s</span></div></div>
+          <div class="page-heading"><div><h1>机器人</h1><p>设置默认身份、回答原则与模型。群组可选择独立方案。</p></div></div>
           <div class="panel">
             <div class="section-heading"><h2>身份</h2><p>名字会用于回答，QQ 群名片需在 QQ 中单独修改。</p></div>
             <div class="two-columns"><label>机器人名字<input data-setting="bot.name" maxlength="40" required autocomplete="off"></label><label>主人 QQ（可选）<input data-setting="bot.ownerQQ" inputmode="numeric" pattern="[0-9]{5,15}" autocomplete="off"><span class="hint">普通群聊无需填写。需要私人 GitHub / Drive 时再指定，且只允许这个账号的私聊访问。UCloud 私聊提醒也使用此账号。</span></label></div>
@@ -43,7 +37,7 @@
           <details class="panel"><summary>QQ 连接与共享教材</summary><div class="details-content"><label>OneBot WebSocket 地址<input data-setting="qq.url" type="url" required></label><label>OneBot Token<input data-secret="onebotToken" type="password" autocomplete="new-password"><span class="hint" data-secret-status="onebotToken"></span></label><p class="hint">地址和 Token 与 NapCat 中一致；修改后管理台会重新连接 QQ。</p><label>共享教材目录<input data-setting="library.root" placeholder="C:/path/to/knowledge/pdfs"></label><label class="check"><input type="checkbox" data-setting="library.sendToModel">允许将这个目录中检索到的教材片段与指定页图片发给模型</label><p class="hint">允许群中的成员可查此目录，目录之外的个人笔记不共享。</p></div></details>
         </section>
         <section data-view="connections" hidden>
-          <div class="page-heading"><div><h1>连接你的资料</h1><p>给机器人需要的访问能力，私人资料仍只在主人私聊中读取。</p></div></div>
+          <div class="page-heading"><div><h1>服务连接</h1><p>给机器人需要的访问能力，私人资料仍只在主人私聊中读取。</p></div></div>
           <div class="connection panel" data-service="ucloud">
             <div class="service-heading"><span class="service-logo school" aria-hidden="true">U</span><div><h2>UCloud</h2><p>北京邮电大学教学云 · 最近截止作业</p></div><span class="badge" data-service-state="ucloud">未检查</span></div>
             <label class="check"><input type="checkbox" data-setting="school.enabled">启用教学云作业</label>
@@ -73,12 +67,12 @@
           </div>
         </section>
         <section data-view="groups" hidden>
-          <div class="page-heading"><div><h1>在需要的群里出现</h1><p>每个群都需要 @ 才回复。开启一个群，不会开放你的私人笔记。</p></div></div>
-          <div class="panel"><div class="section-heading"><h2>允许响应的群</h2><p>机器人需先加入 QQ 群。群里可使用公开作业和共享教材，各群对话互相隔离。</p></div><div id="group-list"></div><div class="inline-add"><label>群号<input id="new-group-id" inputmode="numeric" placeholder="输入 QQ 群号"></label><label>备注名称<input id="new-group-name" maxlength="80" placeholder="方便你识别"></label><button id="add-group" type="button">添加群组</button></div><div class="action-row"><button id="discover-groups" type="button">从 QQ 读取已加入的群</button></div><div id="group-discovery"></div></div>
+          <div class="page-heading"><div><h1>群组</h1><p>每个群都需要 @ 才回复。开启一个群，不会开放你的私人笔记。</p></div></div>
+          <div class="panel"><div class="section-heading"><h2>允许响应的群</h2><p>机器人需先加入 QQ 群。群里可使用公开作业和共享教材，各群对话互相隔离。</p></div><div class="filter-row"><label>搜索群组<input id="group-search" type="search" placeholder="名称或群号"></label><label>生效方式<select id="group-mode"><option value="all">全部群组</option><option value="reply">允许回复</option><option value="monitor">只读监测</option><option value="disabled">暂停回复</option></select></label></div><div id="group-list"></div><div class="inline-add"><label>群号<input id="new-group-id" inputmode="numeric" placeholder="输入 QQ 群号"></label><label>备注名称<input id="new-group-name" maxlength="80" placeholder="方便你识别"></label><button id="add-group" type="button">添加群组</button></div><div class="action-row"><button id="discover-groups" type="button">从 QQ 读取已加入的群</button></div><div id="group-discovery"></div></div>
           <div class="panel"><div class="section-heading"><h2>历史背景</h2><p>普通群消息不会逐条交给模型。需要历史背景时，批量导出并归纳。</p></div><label class="check"><input type="checkbox" data-setting="history.enabled">启用定期历史归纳</label><p class="hint">还需在对应群勾选“允许历史归纳”。最多每 24 小时处理一次；新增文字不足 20 条不调用模型。最多发送 300 条脱敏样本给当前模型，API 模式按配置服务计费。需要本机 QQ Chat Exporter 插件。</p></div>
         </section>
         <section data-view="monitor" hidden>
-          <div class="page-heading"><div><h1>把重要群通知留下来</h1><p>定期整理历史消息，关注截止时间与需要行动的事项。</p></div></div>
+          <div class="page-heading"><div><h1>消息整理</h1><p>定期整理历史消息，关注截止时间与需要行动的事项。</p></div></div>
           <div class="panel"><div class="section-heading"><h2>只读监测</h2><p>列入监测的群禁止机器人发言，包括 @ 回复。即使暂停定期整理，这条禁言保护也保留；移出列表后才恢复普通群规则。</p></div>
             <label class="check"><input type="checkbox" data-setting="monitor.enabled">启用定期群通知整理</label>
             <label>监测群号<textarea id="monitor-group-ids" rows="2" placeholder="每行一个群号，最多 20 个"></textarea></label>
@@ -91,13 +85,14 @@
           <div class="panel"><div class="section-heading"><h2>报告送到哪里</h2><p>所有报告保存在本页，可查看消息原文片段。私聊汇报独立于主人 QQ。</p></div><label class="check"><input type="checkbox" data-setting="monitor.notify">同时通过 QQ 私聊发送报告</label><label>接收 QQ（可选）<input data-setting="monitor.recipientQQ" inputmode="numeric" pattern="[0-9]{5,15}" placeholder="留空则仅保存在后台"></label><p class="hint">接收人可直接私聊问“最近有什么”“历史记录有什么”，无需命令，也不需要主人权限。查询已有报告不调用模型。接收人通常需先添加机器人为好友。发送失败会标在报告中；不会改发到群里。换机器人 QQ 后，需重新选择它已加入的群并确认接收人。</p></div>
         </section>
         <section data-view="memory" hidden>
-          <div class="page-heading"><div><h1>决定它记住什么</h1><p>管理长期记忆、群历史摘要和最近的对话上下文。</p></div></div>
+          <div class="page-heading"><div><h1>记忆</h1><p>管理长期记忆、群历史摘要和最近的对话上下文。</p></div></div>
           <div class="panel"><div class="section-heading"><h2>记忆方式</h2></div><label class="check"><input type="checkbox" data-setting="memory.enabled">在回答中使用记忆</label><div class="two-columns"><label>最近上下文条数<input type="number" data-setting="memory.recentLimit" min="2" max="40" required></label><label>上下文保留时间（分钟）<input type="number" data-setting="memory.ttlMinutes" min="1" max="1440" required></label></div><label class="check"><input type="checkbox" data-setting="memory.groupContext">@ 时结合近期群聊背景</label><label>群聊背景条数<input type="number" data-setting="memory.groupContextLimit" min="2" max="60" required></label><p class="hint">普通群消息只暂存在本机内存，最多 15 分钟；@ 时才发送有限文字给模型，不逐条分析、不下载普通消息的附件。关闭记忆会清空最近对话和背景；长期笔记与摘要仍可管理。</p></div>
         </section>
+<section data-view="customization" hidden><div class="page-heading"><div><h1>自定义</h1><p>创建可复用的机器人方案，在群组中选择使用。方案共用当前 QQ 与接入方式。</p></div></div><div class="panel"><div class="section-heading"><h2>机器人方案</h2><p>默认方案使用“机器人”页配置。新方案可覆盖提示词与模型，不改变访问权限。</p></div><div id="profile-list"></div><button id="add-profile" type="button">添加方案</button></div><details class="panel"><summary>模块与扩展边界</summary><div class="details-content"><p class="hint">模块按能力注册，群权限与资料访问统一校验。当前方案共享一个 QQ 账号；独立多账号需要独立运行环境。</p><div id="workspace-modules"></div></div></details></section>
       </form>
-      <div id="monitor-tools" hidden><div class="panel"><div class="section-heading"><h2>重要信息收件箱</h2><p>自动归纳可能出错，请结合原文确认具体要求与日期。最多保留 100 份报告。</p></div><div class="action-row"><button id="run-monitor" type="button">立即整理已保存的监测群</button><button id="refresh-monitor" type="button">刷新报告</button></div><p id="monitor-status" class="hint"></p><div id="notice-reports"></div></div></div>
+      <div id="monitor-tools" hidden><div class="panel"><div class="section-heading"><h2>重要信息收件箱</h2><p>自动归纳可能出错，请结合原文确认具体要求与日期。最多保留 100 份报告。</p></div><div class="action-row"><button id="run-monitor" type="button">立即整理已保存的监测群</button><button id="refresh-monitor" type="button">刷新报告</button></div><p id="monitor-status" class="hint"></p><div class="filter-row"><label>搜索事项<input id="inbox-search" type="search" placeholder="标题、正文或群组"></label><label>状态<select id="inbox-status"><option value="pending">待处理</option><option value="done">已完成</option><option value="archived">已归档</option><option value="all">全部</option></select></label></div><p id="inbox-counts" class="hint" aria-live="polite"></p><div id="inbox-list"></div><details class="report-history"><summary>查看原始整理报告</summary><div id="notice-reports"></div></details></div></div>
       <div id="memory-tools" hidden>
-        <div class="panel"><div class="section-heading"><h2>长期记忆</h2><p>由你添加和编辑，重启后依然保留。全局记忆会用于所有会话。</p></div><form id="note-form"><label>可见范围<select id="note-scope"></select></label><label>记忆内容<textarea id="note-text" rows="3" maxlength="2000" required placeholder="例如：回答教材问题时先给直观例子，再写正式定义。"></textarea></label><div class="action-row"><button class="secondary" type="submit" id="save-note">添加记忆</button><button type="button" id="cancel-note" hidden>取消编辑</button></div></form><div id="note-list"></div></div>
+        <div class="panel"><div class="section-heading"><h2>长期记忆</h2><p>由你添加和编辑，重启后依然保留。全局记忆会用于所有会话。</p></div><form id="note-form"><label>可见范围<select id="note-scope"></select></label><div class="two-columns"><label>类型<select id="note-kind"><option value="fact">事实</option><option value="preference">偏好</option><option value="instruction">指令</option></select></label><label>标签<input id="note-tags" maxlength="300" placeholder="用逗号分隔"></label></div><label class="check"><input id="note-enabled" type="checkbox" checked>在回答中使用这条记忆</label><label>记忆内容<textarea id="note-text" rows="3" maxlength="2000" required placeholder="例如：回答教材问题时先给直观例子，再写正式定义。"></textarea></label><div class="action-row"><button class="secondary" type="submit" id="save-note">添加记忆</button><button type="button" id="cancel-note" hidden>取消编辑</button></div></form><div class="filter-row"><label>搜索记忆<input id="memory-search" type="search" placeholder="内容或标签"></label><label>范围<select id="memory-filter"><option value="all">所有范围</option></select></label><label>类型<select id="memory-kind-filter"><option value="all">全部类型</option><option value="fact">事实</option><option value="preference">偏好</option><option value="instruction">指令</option></select></label></div><div id="note-list"></div></div>
         <div class="panel"><div class="section-heading"><h2>群历史摘要</h2><p>可修订或清空当前摘要；原始导出文件仍只保存在本机。</p></div><label>群组<select id="digest-group"></select></label><label>摘要<textarea id="digest-text" rows="5" maxlength="1000"></textarea></label><p id="digest-meta" class="hint"></p><div class="action-row"><button id="save-digest" type="button">保存摘要</button><button id="clear-digest" type="button" class="danger-text">清空摘要</button></div></div>
         <div class="panel"><div class="section-heading"><h2>最近对话与群聊背景</h2><p>按会话隔离，标明发言人；背景只保留简短文字和附件类型，重启后自动清空。</p></div><div id="conversation-list"></div><button id="clear-conversations" type="button" class="danger-text">清空全部最近上下文</button></div>
       </div>

@@ -19,6 +19,9 @@ import { NoticeMonitor } from './notice-monitor.mjs';
 import { moduleActive } from './plugin-modules.mjs';
 import { CodexAccount } from './codex-account.mjs';
 import { groupTemplate } from './group-templates.mjs';
+import { resolveGroupPolicy, profileSettings } from './group-policy.mjs';
+import { MODULES, MODULE_IDS } from './module-registry.mjs';
+import { MessageWorkspace } from './message-workspace.mjs';
 
 const project = new URL('../', import.meta.url);
 export class BotRuntime {
@@ -32,13 +35,14 @@ export class BotRuntime {
     this.account = new CodexAccount();
     this.history = new HistoryDigest({ root: new URL('history/', root), ai: (q, c) => this.ai(q, c) });
     this.proxy = { call: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接，请配置 OneBot。'); return this.bot.call(...args); }, send: (target, ...args) => {
-      if (target.group_id && this.store.get().monitor.groups.includes(String(target.group_id))) throw new Error('监测群禁止机器人发言。');
+      if (target.group_id && resolveGroupPolicy(this.store.get(), target.group_id).monitorOnly) throw new Error('监测群禁止机器人发言。');
       if (!this.bot) throw new Error('QQ 尚未连接。'); return this.bot.send(target, ...args);
     } };
     this.media = new MessageMedia(this.proxy);
     this.monitor = new NoticeMonitor({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), send: (target, text) => this.proxy.send(target, text), root: new URL('notices/', root) });
+    this.inbox = new MessageWorkspace({ monitor: this.monitor, root });
     this.members = new GroupMembers(this.proxy, () => this.store.get().groups.filter(group => group.enabled).map(group => group.id));
-    this.handler = createMessageHandler({ bot: this.proxy, memory: this.memory, getDependencies: () => this.dependencies() });
+    this.handler = createMessageHandler({ bot: this.proxy, memory: this.memory, getDependencies: event => this.dependencies(event) });
   }
   config() {
     const config = this.store.get();
@@ -79,21 +83,25 @@ export class BotRuntime {
       } } : {}),
     };
   }
-  dependencies() {
-    const config = this.config(), enabled = config.groups.filter(g => g.enabled);
+  dependencies(event) {
+    const base = this.config(), config = event?.message_type === 'group' ? profileSettings(base, event.group_id) : base, enabled = config.groups.filter(g => g.enabled);
     if (!this.library || this.libraryRoot !== config.library.root) { this.libraryRoot = config.library.root; this.library = config.library.root ? new SharedLibrary(config.library.root) : null; }
     const catalog = config.school.enabled ? this.catalog : {
       list: async () => 'UCloud 未启用。', detail: async () => 'UCloud 未启用。', upcomingTasks: async () => [], books: () => this.catalog.books(),
     };
-    return { enabled: !this.stopped && moduleActive(this.root, 'core'), capabilities: JSON.stringify([config.github.enabled, config.drive.enabled, config.school.enabled]), groups: enabled.filter(g => !config.monitor.groups.includes(g.id)).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
+    const policies = config.groups.map(group => resolveGroupPolicy(config, group.id));
+    return { enabled: !this.stopped && moduleActive(this.root, 'core'), capabilities: JSON.stringify(config), groups: policies.filter(g => g.canReply).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
       resources: this.resources(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: this.media, members: this.members,
-      notes: config.memory.enabled ? this.notes : null, monitor: this.monitor, groupTemplate: id => groupTemplate(config.groups.find(group => group.id === id)),
+      notes: config.memory.enabled ? { context: event => this.notes.context(event, { profileId: event.message_type === 'group' ? resolveGroupPolicy(config, event.group_id).profileId : '' }) } : null, monitor: this.monitor, groupTemplate: id => groupTemplate(config.groups.find(group => group.id === id)),
       history: config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
       persona: loadPersona, shareDocumentsWithModel: config.library.sendToModel, transportVersion: this.transportVersion,
     };
   }
   apply() {
     const config = this.config(); this.memory.configure(config.memory);
+    const identities = new Map(config.groups.map(group => [group.id, JSON.stringify([profileSettings(config, group.id).bot, profileSettings(config, group.id).ai, group.profileId, group.template, group.templatePrompt])]));
+    if (this.groupIdentities) for (const [id, identity] of this.groupIdentities) if (identities.get(id) !== identity) this.memory.clear('group:' + id);
+    this.groupIdentities = identities;
     this.members.retain();
     for (const scope of this.memory.sessions.keys()) if (scope.startsWith('group:') && !config.groups.some(group => group.enabled && 'group:' + group.id === scope)) this.memory.clear(scope);
     const appSignature = JSON.stringify([config.drive.authMode, config.drive.rootFolderId, config.drive.enabled, config.github.authMode, config.github.enabled, config.bot.ownerQQ, config.memory.enabled]);
@@ -160,8 +168,13 @@ export class BotRuntime {
       qq: { connected: this.bot?.socket?.readyState === WebSocket.OPEN, configured: !!this.vault.get('onebotToken'), accountConfigured: !!this.store.get().bot.ownerQQ },
       configured: { ucloud: await exists('session.json'), github: this.store.get().github.authMode === 'chatgpt' ? this.connectors.apps.has('github') : !!this.vault.get('githubToken') || await exists('gh/hosts.yml'), drive: this.store.get().drive.authMode === 'chatgpt' ? this.connectors.apps.has('google_drive') : !!this.vault.get('googleTokens') || await exists('rclone.conf') },
       checks: this.checks, pendingMessages: this.handler.isBusy(), settingsRevision: this.store.get().revision,
-      modules: Object.fromEntries(['core', 'github', 'drive', 'ucloud', 'notices'].map(name => [name, moduleActive(this.root, name)])),
+      modules: Object.fromEntries(MODULE_IDS.map(name => [name, moduleActive(this.root, name)])),
     };
+  }
+  workspace() {
+    const config = this.config();
+    return { revision: config.revision, modules: MODULES.map(module => ({ ...module, active: moduleActive(this.root, module.id) })), profiles: config.profiles,
+      groups: [...new Set([...config.groups.map(group => group.id), ...config.monitor.groups])].map(id => resolveGroupPolicy(config, id)) };
   }
   async groups() {
     const rows = await this.proxy.call('get_group_list', {});

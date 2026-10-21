@@ -25,15 +25,9 @@ for (const id of ['napcat-plugin-slyra', 'napcat-plugin-slyra-monitor']) {
 }
 const template = JSON.parse(await readFile(join(projectRoot, 'napcat-plugin/package.json'), 'utf8'));
 for (const plugin of PLUGIN_MODULES) {
-  const target = join(pluginsRoot, plugin.id); await mkdir(join(target, 'webui'), { recursive: true });
-  for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs']) await copyFile(join(projectRoot, 'napcat-plugin', name), join(target, name));
+  const target = join(pluginsRoot, plugin.id); await mkdir(target, { recursive: true });
+  for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs', 'native-config.mjs']) await copyFile(join(projectRoot, 'napcat-plugin', name), join(target, name));
   await writeFile(join(target, 'package.json'), JSON.stringify({ ...template, name: plugin.id, plugin: plugin.name, description: plugin.description }, null, 2));
-  for (const name of ['app.js', 'style.css', 'napcat.css']) await copyFile(join(projectRoot, 'web', name), join(target, 'webui', name));
-  const base = '/plugin/' + plugin.id + '/files/ui/';
-  const html = (await readFile(join(projectRoot, 'web/index.html'), 'utf8')).replace('<body>', `<body data-napcat="true" data-plugin="${plugin.id}" data-module="${plugin.module}">`)
-    .replace('href="/style.css"', `href="${base}style.css"`).replace('src="/app.js"', `src="${base}app.js"`)
-    .replace('</head>', `<link rel="stylesheet" href="${base}napcat.css"></head>`);
-  await writeFile(join(target, 'webui/index.html'), html);
   await writeFile(join(target, 'deployment.json'), JSON.stringify({ projectRoot, pluginId: plugin.id, nodeBinary: process.execPath }), { mode: 0o600 });
 }
 await writeFile(join(projectRoot, 'data/napcat-ui.json'), JSON.stringify({ origin: 'http://127.0.0.1:6099', managedModules: true }), { mode: 0o600 });

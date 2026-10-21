@@ -10,7 +10,7 @@ const exec = promisify(execFile), root = fileURLToPath(new URL('../', import.met
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')), versions = JSON.parse(await readFile(join(root, 'desktop/versions.json'), 'utf8'));
 const output = join(root, 'release', pkg.version), app = join(output, 'win-x64'), sdk = join(root, 'tools/desktop/webview2');
 await mkdir(join(app, 'runtime'), { recursive: true }); await mkdir(join(app, 'assets'), { recursive: true }); await mkdir(join(app, 'docs'), { recursive: true });
-const canvas = createCanvas(256, 256), ctx = canvas.getContext('2d'); ctx.fillStyle = '#73529b'; ctx.beginPath(); ctx.roundRect(8, 8, 240, 240, 56); ctx.fill(); ctx.fillStyle = '#ffffff'; ctx.font = 'bold 176px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Q', 128, 132);
+const canvas = createCanvas(256, 256), ctx = canvas.getContext('2d'); ctx.fillStyle = '#2457d6'; ctx.beginPath(); ctx.roundRect(8, 8, 240, 240, 56); ctx.fill(); ctx.fillStyle = '#ffffff'; ctx.font = 'bold 176px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Q', 128, 132);
 const png = canvas.toBuffer('image/png'), icon = Buffer.alloc(22); icon.writeUInt16LE(1, 2); icon.writeUInt16LE(1, 4); icon[8] = 0; icon.writeUInt16LE(1, 10); icon.writeUInt16LE(32, 12); icon.writeUInt32LE(png.length, 14); icon.writeUInt32LE(22, 18); await writeFile(join(app, 'app.ico'), Buffer.concat([icon, png]));
 for (const name of ['Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll']) await copyFile(join(sdk, 'lib/net462', name), join(app, name));
 await copyFile(join(sdk, 'runtimes/win-x64/native/WebView2Loader.dll'), join(app, 'WebView2Loader.dll'));
@@ -21,6 +21,10 @@ await copyFile(join(nodeFolder, 'node.exe'), join(app, 'runtime/node.exe')); awa
 for (const name of ['README.md', 'README.Windows.md', 'THIRD_PARTY.md']) await copyFile(join(root, name), join(app, name));
 await copyFile(join(root, 'docs/CONFIGURATION.md'), join(app, 'docs/CONFIGURATION.md'));
 await copyFile(join(root, 'docs/PLUGIN-DISTRIBUTION.md'), join(app, 'docs/PLUGIN-DISTRIBUTION.md'));
+await copyFile(join(root, 'docs/WORKSPACE-ARCHITECTURE.md'), join(app, 'docs/WORKSPACE-ARCHITECTURE.md'));
+await copyFile(join(root, 'docs/NAPCAT-NATIVE-UI.md'), join(app, 'docs/NAPCAT-NATIVE-UI.md'));
+await mkdir(join(app, 'docs/releases'), { recursive: true });
+await copyFile(join(root, 'docs/releases/v' + pkg.version + '.md'), join(app, 'docs/releases/v' + pkg.version + '.md'));
 try { await copyFile(join(sdk, 'LICENSE.txt'), join(app, 'LICENSE-WebView2.txt')); } catch { throw new Error('WebView2 license missing'); }
 await copyFile(join(sdk, 'NOTICE.txt'), join(app, 'NOTICE-WebView2.txt'));
 const compiler = join(process.env.WINDIR || 'C:/Windows', 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'); await access(compiler);
@@ -38,7 +42,7 @@ async function collect(path, prefix) {
     else if (entry.isFile()) files[relative] = new Uint8Array(await readFile(source));
   }
 }
-for (const folder of ['src', 'scripts', 'web', 'napcat-plugin', 'public', 'licenses', 'node_modules']) await collect(join(root, folder), folder + '/');
+for (const folder of ['src', 'scripts', 'napcat-plugin', 'public', 'licenses', 'node_modules']) await collect(join(root, folder), folder + '/');
 for (const file of ['package.json', 'package-lock.json', 'desktop/versions.json']) files[file] = new Uint8Array(await readFile(join(root, file)));
 const paths = Object.keys(files);
 if (paths.some(path => /(?:^|\/)(?:data|tools|\.git|\.env[^/]*)\//.test(path) || path.startsWith('data/') || path.startsWith('tools/'))) throw new Error('发行包混入个人目录。');

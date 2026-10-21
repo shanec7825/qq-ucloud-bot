@@ -4,17 +4,20 @@ import { join, dirname } from 'node:path';
 import { AdminBridge, registerBridge } from './bridge.mjs';
 import { ensureEngine } from './engine.mjs';
 import { PLUGIN_MODULES, nativeConfigSchema } from './catalog.mjs';
+import { createNativeConfigAdapter } from './native-config.mjs';
 
 export let plugin_config_ui = [];
 let deployment;
+let native;
 async function activity(active) {
   if (!deployment) return;
   const directory = join(deployment.projectRoot, 'data', 'napcat-modules'); await mkdir(directory, { recursive: true });
   await writeFile(join(directory, deployment.module + '.json'), JSON.stringify({ active }), { mode: 0o600 });
 }
-// The iframe saves through the authenticated bridge; the outer native dialog has no duplicate settings store.
-export function plugin_get_config() { return {}; }
-export function plugin_set_config() {}
+export function plugin_get_config(ctx) { return native.getConfig(); }
+export function plugin_set_config(ctx, config) { return native.setConfig(config); }
+export function plugin_config_controller(ctx, ui, initialConfig) { return native.controller(ui, initialConfig); }
+export function plugin_on_config_change(ctx, ui, key, value, currentConfig) { return native.onConfigChange(ui, key, value, currentConfig); }
 export async function plugin_cleanup() { await activity(false); }
 
 export async function plugin_init(ctx) {
@@ -32,8 +35,10 @@ export async function plugin_init(ctx) {
   if (typeof projectRoot !== 'string') throw new Error('Missing QQ Agent project directory');
   try { await ensureEngine(projectRoot, nodeBinary); }
   catch { ctx.logger?.error?.('slyra 后台尚未就绪，请检查项目 data/napcat-engine.log 或运行 npm start。'); }
-  registerBridge(ctx, new AdminBridge(projectRoot));
-  ctx.router.static('/ui', 'webui');
+  const bridge = new AdminBridge(projectRoot);
+  native = createNativeConfigAdapter({ module, bridge });
+  registerBridge(ctx, bridge);
+
   await activity(true);
   ctx.logger?.info?.('模块配置已接入 NapCat 插件卡片。');
 }

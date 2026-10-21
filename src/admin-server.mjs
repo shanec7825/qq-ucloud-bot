@@ -6,7 +6,6 @@ import { saveJSON } from './core.mjs';
 import { memoryScope } from './managed-memory.mjs';
 import { GROUP_TEMPLATES } from './group-templates.mjs';
 
-const staticFiles = new Map([['/', ['index.html', 'text/html; charset=utf-8']], ['/app.js', ['app.js', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]);
 const fail = (status, message) => { const error = new Error(message); error.status = status; throw error; };
 async function body(request) {
   if (!String(request.headers['content-type'] || '').startsWith('application/json')) fail(415, '请使用 JSON 请求。');
@@ -34,16 +33,12 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       // Binding to loopback plus an exact Host check prevents DNS rebinding.
       if (req.headers.host !== new URL(origin).host || !['127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) || !req.url.startsWith('/') || req.url.startsWith('//')) fail(403, '只允许本机管理地址。');
       const url = new URL(req.url, origin), route = url.pathname;
-      if (route === '/' && req.method === 'GET' && napcatOrigin) { res.writeHead(303, { location: napcatOrigin + '/webui/plugins#' }); res.end(); return; }
+      if (route === '/' && req.method === 'GET') { res.writeHead(303, { location: (napcatOrigin || 'http://127.0.0.1:6099') + '/webui/plugins#' }); res.end(); return; }
       if (route === '/oauth/google/callback' && req.method === 'GET') {
         if (url.searchParams.has('error')) fail(400, 'Google 授权未完成，请返回管理台重试。');
         await runtime.google.complete(url.searchParams.get('state'), url.searchParams.get('code'), token => !!validSession(token));
         runtime.checks.drive = { ok: true, message: 'Google 只读授权已完成，请测试连接。', checkedAt: new Date().toISOString() };
         res.writeHead(303, { location: napcatOrigin ? napcatOrigin + '/webui/plugins#' : '/#connections' }); res.end(); return;
-      }
-      if (staticFiles.has(route) && req.method === 'GET') {
-        const [file, type] = staticFiles.get(route); const bytes = await readFile(new URL('../web/' + file, import.meta.url));
-        res.writeHead(200, { 'content-type': type }); res.end(bytes); return;
       }
       if (!route.startsWith('/api/')) fail(404, '页面不存在。');
       if (req.headers.origin && req.headers.origin !== origin || req.headers['sec-fetch-site'] === 'cross-site') fail(403, '请从本机管理台操作。');
@@ -66,6 +61,13 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (route === '/api/session' && req.method === 'GET') { json({ csrf: session.csrf }); return; }
       if (route === '/api/logout' && req.method === 'POST') { sessions.delete(token); json({ ok: true }, 200, { 'set-cookie': 'slyra_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' }); return; }
       if (route === '/api/state' && req.method === 'GET') { json({ settings: store.get(), groupTemplates: GROUP_TEMPLATES, secrets: vault.flags(), status: await runtime.status(), googleRedirectURI: origin + '/oauth/google/callback' }); return; }
+      if (route === '/api/workspace' && req.method === 'GET') { json(runtime.workspace()); return; }
+      if (route === '/api/inbox' && req.method === 'GET') { json(await runtime.inbox.list()); return; }
+      if (route === '/api/inbox/item' && req.method === 'PUT') {
+        const input = await body(req);
+        if (!input || Object.keys(input).sort().join() !== 'id,status' || typeof input.id !== 'string' || !['pending', 'done', 'archived'].includes(input.status)) fail(400, '事项身份或状态无效。');
+        json({ item: await runtime.inbox.setStatus(input.id, input.status) }); return;
+      }
       if (route === '/api/runtime/stop' && req.method === 'POST') {
         runtime.stop(); res.once('finish', () => { server.close(); server.closeAllConnections(); }); json({ ok: true }); return;
       }

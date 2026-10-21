@@ -5,7 +5,7 @@ import { routeNatural } from './natural-chat.mjs';
 export function createMessageHandler({ bot, groups, memory, getDependencies, ...deps }) {
   const queues = new Map(), seen = new Set();
   const handler = async event => {
-    const current = () => getDependencies ? getDependencies() : { ...deps, groups };
+    const current = () => getDependencies ? getDependencies(event) : { ...deps, groups };
     if (current().enabled === false) return;
     if (event.post_type !== 'message' || !['group', 'private'].includes(event.message_type) || String(event.user_id) === String(event.self_id)) return;
     if (event.message_type === 'group' && !current().groups.includes(String(event.group_id))) return;

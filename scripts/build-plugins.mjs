@@ -12,12 +12,9 @@ if (Object.keys(backend).some(path => /^(?:data|tools)\//.test(path) || /(?:^|\/
 const manifest = JSON.parse(await readFile(join(root, 'napcat-plugin/package.json'), 'utf8')), bundle = {}, index = [], sums = [];
 for (const plugin of PLUGIN_MODULES) {
   const files = {};
-  for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs']) files[name] = new Uint8Array(await readFile(join(root, 'napcat-plugin', name)));
+  for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs', 'native-config.mjs']) files[name] = new Uint8Array(await readFile(join(root, 'napcat-plugin', name)));
   files['package.json'] = Buffer.from(JSON.stringify({ ...manifest, name: plugin.id, plugin: plugin.name, description: plugin.description, version: pkg.version, homepage: 'https://github.com/shanec7825/qq-ucloud-bot', napcat: { ...manifest.napcat, tags: ['AI', '工具'] } }, null, 2));
   files['deployment.json'] = Buffer.from(JSON.stringify({ distribution: 1, pluginId: plugin.id }));
-  for (const name of ['app.js', 'style.css', 'napcat.css']) files['webui/' + name] = new Uint8Array(await readFile(join(root, 'web', name)));
-  const base = '/plugin/' + plugin.id + '/files/ui/';
-  files['webui/index.html'] = Buffer.from((await readFile(join(root, 'web/index.html'), 'utf8')).replace('<body>', `<body data-napcat="true" data-plugin="${plugin.id}" data-module="${plugin.module}">`).replace('href="/style.css"', `href="${base}style.css"`).replace('src="/app.js"', `src="${base}app.js"`).replace('</head>', `<link rel="stylesheet" href="${base}napcat.css"></head>`));
   files['README.md'] = new Uint8Array(await readFile(join(root, 'docs/PLUGIN-DISTRIBUTION.md')));
   if (plugin.module === 'core') {
     files['backend.zip'] = payload; files['runtime/node.exe'] = runtime;

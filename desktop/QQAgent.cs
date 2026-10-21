@@ -16,8 +16,8 @@ using Microsoft.Web.WebView2.WinForms;
 
 [assembly: AssemblyTitle("QQ Agent")]
 [assembly: AssemblyDescription("QQ Agent Windows desktop launcher")]
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace QQAgentDesktop {
     internal static class Program {
@@ -42,11 +42,13 @@ namespace QQAgentDesktop {
         readonly Label progress = new Label();
         readonly NotifyIcon tray = new NotifyIcon();
         readonly System.Windows.Forms.Timer refresh = new System.Windows.Forms.Timer();
-        readonly List<Button> actions = new List<Button>();
+        readonly List<ToolStripItem> actions = new List<ToolStripItem>();
         readonly bool smoke;
         readonly string[] arguments;
         string workspace, injection;
-        bool busy, quitting, home = true;
+        bool busy, quitting, home = true, refreshInFlight;
+        int navigationGeneration;
+        readonly SemaphoreSlim navigationLock = new SemaphoreSlim(1, 1);
         CoreWebView2Environment environment;
         EventWaitHandle showEvent;
         const string HomeURL = "https://qq-agent.local/home.html";
@@ -54,13 +56,22 @@ namespace QQAgentDesktop {
 
         public MainWindow(string[] args, bool test) {
             smoke = test; arguments = args; Text = "QQ Agent"; Width = 1180; Height = 840; MinimumSize = new Size(900, 640);
-            StartPosition = FormStartPosition.CenterScreen; Font = new Font("Microsoft YaHei UI", 9F); BackColor = Color.FromArgb(248, 246, 252);
+            StartPosition = FormStartPosition.CenterScreen; Font = new Font("Microsoft YaHei UI", 9F); BackColor = Color.FromArgb(244, 246, 248);
             AutoScaleMode = AutoScaleMode.Dpi; Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             if (smoke) { Opacity = 0; ShowInTaskbar = false; }
             var toolbar = new ToolStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden, BackColor = BackColor, Padding = new Padding(14, 4, 14, 4) };
-            var back = new ToolStripButton("← 工作台") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+            var back = new ToolStripButton("NapCat 首页") { DisplayStyle = ToolStripItemDisplayStyle.Text };
             back.Click += async delegate { await RunSafely(NavigateHome); }; toolbar.Items.Add(back);
-            progress.Dock = DockStyle.Bottom; progress.Height = 34; progress.Padding = new Padding(16, 8, 0, 0); progress.ForeColor = Color.FromArgb(105, 87, 124); progress.Text = "正在读取本机状态…";
+            AddAction(toolbar.Items, "QQ 登录", delegate { return OpenPage("/webui/qq_login"); });
+            AddAction(toolbar.Items, "插件管理", delegate { return OpenPage("/webui/plugins"); });
+            var management = new ToolStripDropDownButton("运行管理"); toolbar.Items.Add(management);
+            AddAction(management.DropDownItems, "启动机器人", delegate { return Operate("start"); });
+            AddAction(management.DropDownItems, "停止机器人", delegate { return Operate("stop-bot"); });
+            AddAction(management.DropDownItems, "切换 QQ 账号", SwitchAccount);
+            AddAction(management.DropDownItems, "准备运行组件", delegate { return Operate("install"); });
+            AddAction(management.DropDownItems, "选择已有项目", SelectWorkspace);
+            AddAction(management.DropDownItems, "打开数据目录", delegate { OpenFolder(Path.Combine(workspace, "data")); return Task.FromResult(0); });
+            progress.Dock = DockStyle.Bottom; progress.Height = 34; progress.Padding = new Padding(16, 8, 0, 0); progress.ForeColor = Color.FromArgb(82, 97, 115); progress.Text = "正在读取本机状态…";
             browser.Dock = DockStyle.Fill; browser.DefaultBackgroundColor = BackColor;
             Controls.Add(browser); Controls.Add(progress); Controls.Add(toolbar);
             var menu = new ContextMenuStrip();
@@ -76,8 +87,11 @@ namespace QQAgentDesktop {
             refresh.Interval = 12000; refresh.Tick += async delegate { if (!busy && home) await RefreshStatus(); };
             if (!smoke) { showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\QQAgentDesktopShow"); Task.Run(delegate { while (!IsDisposed) { try { if (showEvent.WaitOne(1500)) BeginInvoke((Action)RestoreWindow); } catch { break; } } }); }
         }
+        void AddAction(ToolStripItemCollection items, string label, Func<Task> action) {
+            var item = new ToolStripMenuItem(label); item.Click += async delegate { await RunSafely(action); }; items.Add(item); actions.Add(item);
+        }
         async Task RunSafely(Func<Task> action) {
-            if (busy) return; busy = true; actions.ForEach(button => button.Enabled = false);
+            if (busy) return; busy = true; navigationGeneration++; actions.ForEach(button => button.Enabled = false);
             try { await action(); }
             catch (Exception error) { progress.Text = error.Message; if (!smoke) MessageBox.Show(error.Message, "QQ Agent", MessageBoxButtons.OK, MessageBoxIcon.Information); else throw; }
             finally { busy = false; actions.ForEach(button => button.Enabled = true); }
@@ -127,32 +141,58 @@ namespace QQAgentDesktop {
                 if (entry.FullName.StartsWith("data/") || entry.FullName.StartsWith("tools/") || Path.GetFileName(path).StartsWith(".env")) throw new Exception("安装包包含不允许覆盖的配置目录。");
                 Directory.CreateDirectory(Path.GetDirectoryName(path)); entry.ExtractToFile(path, true);
             }
-            File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), "1.1.0");
+            File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), "1.3.0");
         }
         void SaveWorkspace() { if (!smoke) File.WriteAllText(Path.Combine(Program.AppData, "desktop.json"), Program.Json.Serialize(new { workspace = workspace })); }
         async Task SelectWorkspace() { using (var dialog = new FolderBrowserDialog { Description = "选择现有 QQ Agent 项目目录，配置和授权会继续使用", SelectedPath = workspace }) {
             if (dialog.ShowDialog(this) == DialogResult.OK) { if (!IsProject(dialog.SelectedPath)) throw new Exception("此目录未找到桌面支持脚本，请先更新项目，或使用安装包默认工作区。"); workspace = dialog.SelectedPath; SaveWorkspace(); await NavigateHome(); }
         } }
-        async Task NavigateHome() { home = true; browser.CoreWebView2.Navigate(HomeURL); await Task.FromResult(0); }
+        async Task NavigateHome() {
+            int generation = ++navigationGeneration; string folder = workspace;
+            var status = await Service("status", 25000);
+            if (!CurrentNavigation(generation, folder)) return;
+            if (GetBool(status, "webuiAvailable")) { await OpenPageCore("/webui/", generation, folder); return; }
+            home = true; browser.CoreWebView2.Navigate(HomeURL);
+        }
         async Task Operate(string action) { progress.Text = action == "install" ? "准备组件中，首次下载可能需要几分钟…" : action == "stop-bot" ? "正在停止机器人…" : "正在启动并复用本机后台…"; await Service(action, action == "install" ? 600000 : 150000); await NavigateHome(); }
         async Task OpenPage(string path) {
+            await OpenPageCore(path, ++navigationGeneration, workspace);
+        }
+        bool CurrentNavigation(int generation, string folder) { return generation == navigationGeneration && folder == workspace && !IsDisposed; }
+        async Task OpenPageCore(string path, int generation, string folder) {
+            if (!CurrentNavigation(generation, folder)) return;
             var status = await Service("status", 25000);
-            if (!GetBool(status, "webuiAvailable")) { progress.Text = "正在启动 QQ 登录服务…"; await Service("start", 150000); }
+            if (!CurrentNavigation(generation, folder)) return;
+            if (!GetBool(status, "webuiAvailable")) { progress.Text = "正在启动 QQ 登录服务…"; await Service("start", 150000); if (!CurrentNavigation(generation, folder)) return; }
             var session = await Service("session", 25000); string credential = GetText(session, "credential");
+            if (!CurrentNavigation(generation, folder)) return;
             if (String.IsNullOrEmpty(credential)) throw new Exception("未取得本机登录会话。");
-            if (injection != null) browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(injection);
-            injection = await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("if(location.origin==='" + LocalOrigin + "'){localStorage.setItem('token',JSON.stringify(" + Program.Json.Serialize(credential) + "));}");
-            home = false; browser.CoreWebView2.Navigate(LocalOrigin + path); progress.Text = path.Contains("qq_login") ? "QQ 登录入口可从工作台或托盘打开。已登录时会显示当前账号。" : "配置保存在当前项目，切换 QQ 不会清除。";
+            await navigationLock.WaitAsync();
+            try {
+                if (!CurrentNavigation(generation, folder)) return;
+                if (injection != null) { browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(injection); injection = null; }
+                string registered = await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("if(location.origin==='" + LocalOrigin + "'){localStorage.setItem('token',JSON.stringify(" + Program.Json.Serialize(credential) + "));}");
+                if (!CurrentNavigation(generation, folder)) { browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(registered); return; }
+                injection = registered;
+                home = false; browser.CoreWebView2.Navigate(LocalOrigin + path); progress.Text = "NapCat 原版 WebUI · 关闭窗口收起到托盘";
+            } finally { navigationLock.Release(); }
         }
         async Task SwitchAccount() {
             if (MessageBox.Show(this, "将断开当前机器人 QQ，重新显示登录入口。\n机器人设置、模型和其他服务授权会保留。\n\n现在切换 QQ？", "切换 QQ", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
             progress.Text = "正在切换 QQ，请等待新的登录页面…"; await Service("switch-account", 150000); await OpenPage("/webui/qq_login");
         }
         async Task RefreshStatus() {
-            try { var status = await Service("status", 25000); status["workspace"] = workspace; status["version"] = "1.1.0";
+            if (refreshInFlight || busy || !home) return;
+            refreshInFlight = true; int generation = navigationGeneration; string folder = workspace;
+            try { var status = await Service("status", 25000);
+                if (!CurrentNavigation(generation, folder) || busy || !home) return;
+                status["workspace"] = folder; status["version"] = "1.3.0";
+                if (GetBool(status, "webuiAvailable")) { await OpenPageCore("/webui/", generation, folder); return; }
                 if (home && browser.CoreWebView2 != null) await browser.CoreWebView2.ExecuteScriptAsync("window.renderStatus&&window.renderStatus(" + Program.Json.Serialize(status) + ")");
-                progress.Text = GetBool(status, "webuiAvailable") ? GetBool(status, "qqLoggedIn") ? "QQ 已登录 · 关闭窗口收起到托盘" : "QQ 等待登录 · 点击左侧“QQ 登录”" : "后台未运行 · 首次使用先准备组件，再启动机器人";
-            } catch (Exception error) { progress.Text = error.Message; }
+                if (!CurrentNavigation(generation, folder) || busy || !home) return;
+                progress.Text = GetBool(status, "webuiAvailable") ? "NapCat 原版 WebUI" : "后台未运行 · 首次使用先准备组件，再启动机器人";
+            } catch (Exception error) { if (CurrentNavigation(generation, folder) && !busy && home) progress.Text = error.Message; }
+            finally { refreshInFlight = false; }
         }
         static bool GetBool(Dictionary<string, object> value, string key) { return value.ContainsKey(key) && value[key] is bool && (bool)value[key]; }
         static string GetText(Dictionary<string, object> value, string key) { return value.ContainsKey(key) && value[key] != null ? value[key].ToString() : ""; }
@@ -187,15 +227,15 @@ namespace QQAgentDesktop {
         async Task SmokeTest() {
             var status = await Service("status", 25000); if (!GetBool(status, "webuiAvailable")) throw new Exception("实机验证需要本机 NapCat 正在运行。");
             await OpenPage("/webui/plugins"); bool ready = false;
-            for (int i = 0; i < 100; i++) { string value = await browser.CoreWebView2.ExecuteScriptAsync("document.body.innerText.includes('Google Drive')&&document.body.innerText.includes('机器人核心')"); if (value == "true") { ready = true; break; } await Task.Delay(150); }
+            for (int i = 0; i < 100; i++) { string value = await browser.CoreWebView2.ExecuteScriptAsync("location.origin==='http://127.0.0.1:6099'&&location.pathname.startsWith('/webui/plugins')&&document.body.innerText.length>20&&!!document.querySelector('#root')"); if (value == "true") { ready = true; break; } await Task.Delay(150); }
             if (!ready) throw new Exception("内嵌插件管理未能加载。");
             string output = Program.Argument(arguments, "--output") ?? Path.Combine(workspace, "data", "desktop-smoke"); Directory.CreateDirectory(output);
             using (var stream = File.Create(Path.Combine(output, "plugins.png"))) await browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
             await OpenPage("/webui/qq_login"); await Task.Delay(1500);
             HideToTray(); if (Visible || !tray.Visible) throw new Exception("托盘收起失败。"); RestoreWindow(); if (!Visible) throw new Exception("托盘恢复失败。");
             await NavigateHome(); await Task.Delay(300); await RefreshStatus();
-            string shown = await browser.CoreWebView2.ExecuteScriptAsync("document.querySelector('#qq').textContent");
-            if (GetBool(status, "qqLoggedIn") && shown != Program.Json.Serialize("已登录")) throw new Exception("首页 QQ 登录状态与本机真实状态不一致。");
+            string shown = await browser.CoreWebView2.ExecuteScriptAsync("location.origin==='http://127.0.0.1:6099'&&location.pathname.startsWith('/webui/')");
+            if (shown != "true") throw new Exception("首页未打开 NapCat 原版 WebUI。");
             using (var stream = File.Create(Path.Combine(output, "home.png"))) await browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
             WriteSmoke(true, "Native WebView2, authenticated plugin page, QQ login navigation and tray restore verified. No account switch, QQ message or model request."); quitting = true; Close();
         }

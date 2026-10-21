@@ -1,25 +1,74 @@
-/* The NapCat shell owns navigation, login, background and theme. */
-[data-module=core] [data-tab=connections], [data-module=core] [data-tab=monitor] { display: none; }
-[data-module=notices] [data-tab]:not([data-tab=monitor]) { display: none; }
-[data-module=github] [data-tab]:not([data-tab=connections]), [data-module=drive] [data-tab]:not([data-tab=connections]), [data-module=ucloud] [data-tab]:not([data-tab=connections]) { display: none; }
-.napcat-embedded blockquote { overflow-wrap: anywhere; margin: 12px 0; padding: 10px 16px; border-left: 3px solid var(--accent); }
-.napcat-embedded { --accent: hsl(var(--nc-primary, 330 94% 50%)); --accent-soft: hsl(var(--nc-primary, 330 94% 50%) / .1); --ink: hsl(var(--nc-foreground, 240 6% 10%)); --muted: hsl(var(--nc-default-500, 240 4% 45%)); --surface: hsl(var(--nc-background, 0 0% 100%) / .55); --line: hsl(var(--nc-default-200, 240 6% 90%) / .7); background: transparent; color: var(--ink); }
-html:has(.napcat-embedded) { background: transparent; color: var(--ink); }
-.napcat-embedded .shell { display: block; min-height: 100vh; }
-.napcat-embedded .sidebar { position: sticky; top: 0; z-index: 3; height: auto; padding: 12px 18px; border: 0; background: hsl(var(--nc-background, 0 0% 100%) / .8); backdrop-filter: blur(20px); }
-.napcat-embedded .brand, .napcat-embedded .sidebar-bottom, .napcat-embedded .workspace > header, .napcat-embedded .identity-orbit { display: none; }
-.napcat-embedded .sidebar nav { display: flex; gap: 8px; overflow-x: auto; }
-.napcat-embedded .sidebar nav a { min-width: max-content; color: var(--muted); padding: 11px 19px; border-radius: 24px; }
-.napcat-embedded .sidebar nav a[aria-current=page] { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
-.napcat-embedded main { max-width: 1140px; padding: 22px 24px 115px; }
-.napcat-embedded .page-heading { min-height: 78px; margin-bottom: 16px; }
-.napcat-embedded h1 { font-size: 25px; }
-.napcat-embedded .panel { border-radius: 22px; background: var(--surface); backdrop-filter: blur(16px); box-shadow: 0 8px 28px #301b4810; }
-.napcat-embedded button { border-radius: 22px; min-height: 44px; }
-.napcat-embedded button.primary { background: var(--accent); border-color: var(--accent); box-shadow: 0 5px 18px hsl(var(--nc-primary, 330 94% 50%) / .22); }
-.napcat-embedded input:not([type=checkbox]), .napcat-embedded select, .napcat-embedded textarea { background: hsl(var(--nc-default-100, 240 5% 96%) / .7); border-color: transparent; border-radius: 13px; color: var(--ink); }
-.napcat-embedded .save-bar { left: 0; padding: 14px 24px; background: hsl(var(--nc-background, 0 0% 100%) / .85); backdrop-filter: blur(20px); }
-.napcat-embedded .credential-box, .napcat-embedded .copy-row { background: hsl(var(--nc-default-100, 240 5% 96%) / .5); border-color: var(--line); border-radius: 15px; }
-.napcat-embedded .hint, .napcat-embedded p { color: var(--muted); }
-.napcat-embedded :focus-visible { outline-color: var(--accent); }
-@media (max-width: 680px) { .napcat-embedded .sidebar { padding: 10px; } .napcat-embedded .sidebar nav a { padding: 10px 14px; font-size: 13px; } .napcat-embedded main { padding: 14px 12px 110px; } .napcat-embedded .panel { padding: 22px 18px; } .napcat-embedded .save-bar { padding: 12px; } }
+/* NapCat owns the outer shell;
+embedded pages share workbench components. */
+[data-module=core] [data-tab=connections],[data-module=core] [data-tab=monitor]{
+  display:none
+}
+[data-module=notices] .sidebar,[data-module=github] .sidebar,[data-module=drive] .sidebar,[data-module=ucloud] .sidebar{
+  display:none
+}
+.napcat-embedded{
+  background:var(--bg);
+  color:var(--ink)
+}
+.napcat-embedded .shell{
+  display:block;
+  min-height:100vh
+}
+.napcat-embedded .sidebar{
+  position:sticky;
+  top:0;
+  z-index:6;
+  height:auto;
+  padding:10px 20px;
+  background:var(--surface);
+  border:0;
+  border-bottom:1px solid var(--line)
+}
+.napcat-embedded .brand,.napcat-embedded .sidebar-bottom,.napcat-embedded .workspace>header{
+  display:none
+}
+.napcat-embedded .sidebar nav{
+  display:flex;
+  gap:4px;
+  overflow-x:auto;
+  padding:0
+}
+.napcat-embedded .sidebar nav a{
+  flex-shrink:0;
+  padding:9px 13px;
+  min-height:42px;
+  font-size:13px
+}
+.napcat-embedded main{
+  max-width:1040px;
+  padding:24px 24px 112px
+}
+.napcat-embedded .page-heading{
+  min-height:60px;
+  margin-bottom:20px
+}
+.napcat-embedded h1{
+  font-size:24px
+}
+.napcat-embedded .save-bar{
+  left:0;
+  padding:12px 24px
+}
+@media(max-width:680px){
+  .napcat-embedded .sidebar{
+    padding:8px 12px
+  }
+  .napcat-embedded .sidebar nav a{
+    padding:8px 11px;
+    font-size:12px
+  }
+  .napcat-embedded main{
+    padding:20px 12px 124px
+  }
+  .napcat-embedded .save-bar{
+    padding:12px
+  }
+  .napcat-embedded h1{
+    font-size:22px
+  }
+}

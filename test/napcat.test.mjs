@@ -28,7 +28,12 @@ test('local trust exception affects only installed agent modules and retains sen
 
 test('module configuration opens in the native plugin card without registering extension pages', () => {
   assert.equal(PLUGIN_MODULES.length, 5);
-  for (const plugin of PLUGIN_MODULES) { const schema = nativeConfigSchema(plugin.id); assert.equal(schema[0].type, 'html'); assert.ok(schema[0].default.includes('/plugin/' + plugin.id + '/files/ui/index.html')); }
+  for (const plugin of PLUGIN_MODULES) {
+    const schema = nativeConfigSchema(plugin.id);
+    assert.equal(schema[0].type, 'select'); assert.equal(schema[0].reactive, true);
+    assert.ok(schema.every(field => ['select', 'text'].includes(field.type)));
+    assert.doesNotMatch(JSON.stringify(schema), /iframe|<style|\/files\/ui/);
+  }
   assert.throws(() => nativeConfigSchema('untrusted'));
 });
 

@@ -2,8 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export function allowedRoute(method, path) {
-  const rules = { GET: /^(?:session|state|groups|memory|monitor|codex\/account)$/,
-    PUT: /^(?:settings|secrets|memory\/notes|memory\/digest)$/,
+  const rules = { GET: /^(?:session|state|workspace|inbox|groups|memory|monitor|codex\/account)$/,
+    PUT: /^(?:settings|secrets|inbox\/item|memory\/notes|memory\/digest)$/,
     POST: /^(?:runtime\/stop|codex\/login|monitor\/run|ucloud\/login|google\/authorize|check\/(?:github|drive|ucloud|model))$/,
     DELETE: /^(?:memory\/conversations|memory\/notes\/[\w-]{1,100})$/ };
   return typeof method === 'string' && Object.hasOwn(rules, method) && typeof path === 'string' && rules[method].test(path);
