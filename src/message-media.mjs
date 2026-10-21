@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { join, relative, isAbsolute, extname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { segments, contentText } from './message-content.mjs';
 const execute = promisify(execFile);
@@ -85,19 +86,43 @@ export async function fetchImage(value, fetcher = fetch) {
 }
 
 export class MessageMedia {
-  constructor(bot, download = fetchImage) { this.bot = bot; this.download = download; }
+  constructor(bot, download = fetchImage) { this.bot = bot; this.download = download; this.stickers = new Map(); }
+  conversation(event) { return [event.accountId || 'default', event.message_type, event.group_id || event.user_id].join(':'); }
+  remember(event) {
+    const key = this.conversation(event), entries = this.stickers.get(key) || new Map();
+    for (const part of segments(event).slice(0, 40)) {
+      if (!['image', 'mface'].includes(part.type)) continue;
+      try {
+        const url = mediaURL(stickerURL(part.data || {})).href;
+        const id = createHash('sha256').update(url).digest('hex').slice(0, 16);
+        entries.set(id, { id, name: String(part.data?.summary || part.data?.name || '群友表情包').slice(0, 60), url });
+      } catch {}
+    }
+    while (entries.size > 30) entries.delete(entries.keys().next().value);
+    this.stickers.set(key, entries);
+    while (this.stickers.size > 100) this.stickers.delete(this.stickers.keys().next().value);
+  }
+  listStickers(event) { return [...(this.stickers.get(this.conversation(event))?.values() || [])].map(({id, name}) => ({id, name})); }
+  outgoingSticker(event, id) {
+    const entry = this.stickers.get(this.conversation(event))?.get(String(id));
+    if (!entry) throw new Error('当前会话没有此表情包。');
+    return { type: 'image', data: { file: entry.url } };
+  }
   async prepare(event, { describe } = {}) {
+    this.remember(event);
     const images = [], notes = [], quotes = []; let folder;
+    let calls = 0, nodes = 0; const forwards = new Set(), replies = new Set();
+    const call = async (action, params) => { if (++calls > 10) throw new Error('消息读取次数上限'); return this.bot.call(action, params); };
     const ensureFolder = async () => { if (!folder) { const root = new URL('../data/message-media/', import.meta.url); await mkdir(root, { recursive: true }); folder = await mkdtemp(fileURLToPath(new URL('request-', root))); } return folder; };
     const queue = [...segments(event)].map(part => ({ part, depth: 0 }));
     try {
-      for (let index = 0; index < queue.length && index < 60; index++) {
+      for (let index = 0; index < queue.length && index < 120; index++) {
         const { part, depth } = queue[index]; const data = part.data || {};
         if (['image', 'mface'].includes(part.type)) {
           if (images.length >= 3) { notes.push('本条只查看前三张图片。'); continue; }
           try {
             let url = stickerURL(data);
-            if (!url && (data.file || data.file_id)) url = (await this.bot.call('get_image', { file: data.file_id || data.file })).url;
+            if (!url && (data.file || data.file_id)) url = (await call('get_image', { file: data.file_id || data.file })).url;
             if (!url) throw new Error('无图片地址');
             const bytes = await this.download(url);
             imageDimensions(bytes);
@@ -112,9 +137,10 @@ export class MessageMedia {
             images.push({ path, source: '用户发送的图片或表情包', page: images.length + 1 });
             notes.push('附图为用户图片；动态表情目前查看首帧。');
           } catch { notes.push('这张图片暂未取得，不能编造图片内容。'); }
-        } else if (part.type === 'reply' && depth < 1) {
+        } else if (part.type === 'reply' && depth < 4) {
           try {
-            const message = await this.bot.call('get_msg', { message_id: data.id });
+            if (replies.has(String(data.id))) continue; replies.add(String(data.id));
+            const message = await call('get_msg', { message_id: data.id });
             const same = event.message_type === 'group' ? message.message_type === 'group' && String(message.group_id) === String(event.group_id) :
               message.message_type === 'private' && (String(message.user_id ?? message.sender?.user_id) === String(event.user_id) || String(message.target_id) === String(event.user_id) && String(message.user_id ?? message.sender?.user_id) === String(event.self_id));
             if (!same) { notes.push('引用不属于当前会话，未读取。'); continue; }
@@ -124,10 +150,19 @@ export class MessageMedia {
             notes.push('被引用内容（作者见 quotes）：' + quote.text);
             queue.push(...segments(message).map(part => ({ part, depth: depth + 1 })));
           } catch { notes.push('引用消息已失效或不可见。'); }
-        } else if (['forward', 'node'].includes(part.type) && depth < 1) {
+        } else if (['forward', 'node'].includes(part.type) && depth < 4) {
           try {
-            const rows = Array.isArray(data.content) ? data.content : (await this.bot.call('get_forward_msg', { id: data.id })).messages;
-            for (const row of (rows || []).slice(0, 12)) {
+            if (part.type === 'node' && Array.isArray(data.content)) {
+              if (++nodes > 40) continue;
+              notes.push('转发节点内容：' + contentText({ message: data.content }));
+              queue.push(...data.content.slice(0, 40).map(part => ({ part, depth: depth + 1 })));
+              continue;
+            }
+            if (!Array.isArray(data.content) && forwards.has(String(data.id))) continue;
+            if (!Array.isArray(data.content)) forwards.add(String(data.id));
+            const rows = Array.isArray(data.content) ? data.content : (await call('get_forward_msg', { id: data.id })).messages;
+            for (const row of (rows || []).slice(0, 40)) {
+              if (++nodes > 40) { notes.push('转发节点达到 40 条上限。'); break; }
               const message = { message: row.message || row.content || [] };
               notes.push('转发内容（不是当前发送者本人发言），作者 ' + String(row.sender?.card || row.sender?.nickname || row.nickname || '未知').slice(0, 60) + '：' + contentText(message));
               queue.push(...segments(message).map(part => ({ part, depth: depth + 1 })));
@@ -137,10 +172,10 @@ export class MessageMedia {
           try {
             if (Number(data.file_size) > 40 * 1024 * 1024) throw new Error('附件过大');
             if (part.type === 'record' && depth === 0 && event.message_id) {
-              try { const result = await this.bot.call('fetch_ptt_text', { message_id: event.message_id }); if (result.text?.trim()) { notes.push('QQ 语音转文字（可能有识别错误）：' + result.text.slice(0, 10000)); continue; } } catch {}
+              try { const result = await call('fetch_ptt_text', { message_id: event.message_id }); if (result.text?.trim()) { notes.push('QQ 语音转文字（可能有识别错误）：' + result.text.slice(0, 10000)); continue; } } catch {}
             }
             if (!process.env.MEDIA_PYTHON) throw new Error('本地解码尚未配置');
-            const info = await this.bot.call(part.type === 'record' ? 'get_record' : 'get_file', { file_id: attachmentId(data), ...(part.type === 'record' ? { out_format: 'mp3' } : {}) });
+            const info = await call(part.type === 'record' ? 'get_record' : 'get_file', { file_id: attachmentId(data), ...(part.type === 'record' ? { out_format: 'mp3' } : {}) });
             const attachmentFolder = join(await ensureFolder(), `media-${index}`);
             await mkdir(attachmentFolder, { recursive: true });
             const path = join(attachmentFolder, `attachment.${part.type === 'video' ? 'mp4' : 'mp3'}`);
@@ -156,7 +191,7 @@ export class MessageMedia {
             if (Number(data.file_size) > 40 * 1024 * 1024) throw new Error('附件过大');
             const supported = ['.txt', '.md', '.csv', '.json', '.log', '.py', '.js', '.ts', '.html', '.xml', '.yaml', '.yml', '.pdf', '.ppt', '.pptx'];
             if (!supported.includes(extension)) throw new Error('文件格式不支持');
-            const info = await this.bot.call('get_file', { file_id: attachmentId(data) });
+            const info = await call('get_file', { file_id: attachmentId(data) });
             const bytes = await protocolFile(info, event);
             if (!['.pdf', '.ppt', '.pptx'].includes(extension)) { notes.push('用户发送的文件 ' + String(data.name).slice(0, 150) + '：\n' + bytes.toString('utf8', 0, 24000)); continue; }
             const path = join(await ensureFolder(), `document-${index}${extension}`);

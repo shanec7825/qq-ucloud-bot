@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-const READ_TOOLS = new Set(['google_drive.search', 'google_drive.fetch', 'google_drive.list_folder', 'github.get_profile', 'github.list_repositories', 'github.fetch_file']);
+const READ_TOOLS = new Set(['google_drive.search', 'google_drive.fetch', 'google_drive.list_folder', 'github.get_profile', 'github.list_repositories', 'github.fetch_file', 'github.get_repository', 'github.search_repositories', 'github.search_code', 'github.list_issues', 'github.get_issue', 'github.list_pull_requests', 'github.get_pull_request', 'github.list_commits', 'github.get_commit']);
+const readToolName = name => READ_TOOLS.has(name) || /^(?:github|google_drive)\.(?:get|list|search|fetch|read|find|query|lookup|export)_[A-Za-z0-9_]+$/.test(name);
 const publicError = () => new Error('ChatGPT 插件暂不可用。请确认本机 Codex 已登录同一 ChatGPT 账号，并在 Codex 中连接 Google Drive / GitHub 后重试。');
 
 /** Direct read-only MCP calls through the official App Server; no model turns. */
@@ -88,13 +89,22 @@ export class ChatGPTConnectorClient {
     });
   }
   touch() { clearTimeout(this.idle); this.idle = setTimeout(() => { if (!this.pending.size) this.close(); else this.touch(); }, 10 * 60000); this.idle.unref(); }
-  async call(tool, args) {
-    if (!READ_TOOLS.has(tool)) throw new Error('机器人只允许指定的 Drive/GitHub 只读工具。');
+  async readCatalog(providers = ['github', 'google_drive']) {
+    await this.ready();
+    const allowed = new Set(providers);
+    return Object.keys(this.tools || {}).filter(name => readToolName(name)).filter(name => {
+      const provider = name.split('.')[0], tool = this.tools?.[name], hints = tool?.annotations;
+      return allowed.has(provider) && this.apps.has(provider) && tool?.inputSchema && hints?.readOnlyHint === true && hints?.destructiveHint !== true && hints?.openWorldHint !== true;
+    }).map(name => ({ name, description: String(this.tools[name].description || '').slice(0, 6000), inputSchema: structuredClone(this.tools[name].inputSchema), annotations: structuredClone(this.tools[name].annotations) }));
+  }
+  async call(tool, args, { beforeCall = () => {} } = {}) {
+    if (!readToolName(tool)) throw new Error('机器人只允许指定的 Drive/GitHub 只读工具。');
     await this.ready();
     if (!this.apps.has(tool.split('.')[0])) throw publicError();
     const annotations = this.tools[tool]?.annotations;
     if (annotations?.readOnlyHint !== true || annotations?.destructiveHint === true || annotations?.openWorldHint === true) throw new Error('这个插件工具没有通过只读检查，未执行。');
     this.touch();
+    beforeCall();
     const result = await this.rpc('mcpServer/tool/call', { threadId: this.threadId, server: 'codex_apps', tool, arguments: args });
     if (result.isError) throw new Error('插件读取失败，请检查文件访问权限或在 Codex 中重新连接账号。');
     if (result.structuredContent) return result.structuredContent;

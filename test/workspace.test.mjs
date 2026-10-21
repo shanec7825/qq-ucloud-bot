@@ -30,10 +30,10 @@ test('version 1 settings migrate without losing names/model/permissions and reje
   for (const group of legacy.groups) delete group.profileId;
   await writeFile(new URL('legacy.json', root), JSON.stringify(legacy));
   const store = new SettingsStore(new URL('legacy.json', root), {}); await store.load();
-  assert.equal(store.get().version, 2); assert.deepEqual(store.get().profiles, []);
+  assert.equal(store.get().version, 3); assert.deepEqual(store.get().profiles, []);
   assert.equal(store.get().bot.name, legacy.bot.name); assert.equal(store.get().ai.model, legacy.ai.model);
   assert.equal(store.get().groups[0].enabled, true); assert.equal(store.get().groups[0].profileId, '');
-  assert.equal(JSON.parse(await readFile(new URL('legacy.json', root))).version, 2);
+  assert.equal(JSON.parse(await readFile(new URL('legacy.json', root))).version, 3);
   assert.deepEqual(JSON.parse(await readFile(new URL('legacy.v1.backup.json', root))), legacy);
   const malformed = configured(); delete malformed.profiles; assert.throws(() => validateSettings(malformed));
   for (const numericId of [0, 123]) {

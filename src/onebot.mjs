@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { parseJSON } from './core.mjs';
+import { qqPlainText } from './qq-output.mjs';
+import { mediaURL } from './message-media.mjs';
 
 export class OneBot {
   constructor(address, token, onEvent) {
@@ -44,7 +46,7 @@ export class OneBot {
   }
   async send(target, text, { replyTo, mention } = {}) {
     // 使用 text 消息段，避免将课程文字解析成 CQ 指令。
-    const chunks = String(text).match(/[\s\S]{1,1800}/gu) || [''];
+    const chunks = qqPlainText(text).match(/[\s\S]{1,1800}/gu) || [''];
     const sent = [];
     for (const [index, chunk] of chunks.entries()) {
       const prefix = [];
@@ -57,6 +59,16 @@ export class OneBot {
       }));
     }
     return sent;
+  }
+  async sendSegments(target, parts) {
+    if (!Array.isArray(parts) || !parts.length || parts.length > 8) throw new Error('消息段数量无效。');
+    const message = parts.map(part => {
+      if (part.type === 'text') return { type: 'text', data: { text: qqPlainText(part.data?.text).slice(0, 1800) } };
+      if (part.type === 'face' && /^\d{1,4}$/.test(String(part.data?.id))) return { type: 'face', data: { id: String(part.data.id) } };
+      if (part.type === 'image') return { type: 'image', data: { file: mediaURL(part.data?.file).href } };
+      throw new Error('不支持或不安全的消息段。');
+    });
+    return this.call(target.group_id ? 'send_group_msg' : 'send_private_msg', { ...target, message });
   }
   close() { this.stopped = true; clearTimeout(this.retry); this.socket?.close(); }
 }

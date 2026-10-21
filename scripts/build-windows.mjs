@@ -23,6 +23,7 @@ await copyFile(join(root, 'docs/CONFIGURATION.md'), join(app, 'docs/CONFIGURATIO
 await copyFile(join(root, 'docs/PLUGIN-DISTRIBUTION.md'), join(app, 'docs/PLUGIN-DISTRIBUTION.md'));
 await copyFile(join(root, 'docs/WORKSPACE-ARCHITECTURE.md'), join(app, 'docs/WORKSPACE-ARCHITECTURE.md'));
 await copyFile(join(root, 'docs/NAPCAT-NATIVE-UI.md'), join(app, 'docs/NAPCAT-NATIVE-UI.md'));
+for (const name of ['ACCOUNT-PERSONAS.md', 'GROUP-NOTICES.md']) await copyFile(join(root, 'docs', name), join(app, 'docs', name));
 await mkdir(join(app, 'docs/releases'), { recursive: true });
 await copyFile(join(root, 'docs/releases/v' + pkg.version + '.md'), join(app, 'docs/releases/v' + pkg.version + '.md'));
 try { await copyFile(join(sdk, 'LICENSE.txt'), join(app, 'LICENSE-WebView2.txt')); } catch { throw new Error('WebView2 license missing'); }

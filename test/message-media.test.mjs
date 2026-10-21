@@ -8,6 +8,21 @@ import { MessageMedia, mediaURL, fetchImage, imageDimensions, stickerURL } from 
 
 const group = { post_type: 'message', message_type: 'group', group_id: 300000001, user_id: 10001, self_id: 100000002 };
 const at = { type: 'at', data: { qq: group.self_id } };
+test('嵌套转发读取图片、限制循环与深度；表情注册按会话隔离', async () => {
+  const canvas = createCanvas(20,20), calls = [];
+  const media = new MessageMedia({call:async (action, params)=>{
+    calls.push(params.id);
+    return {messages:[{content:[{type:'image',data:{url:'https://gchat.qpic.cn/a'}},{type:'forward',data:{id:params.id}},{type:'forward',data:{id:String(Number(params.id)+1)}}]}]};
+  }}, async()=>canvas.encode('png'));
+  const result = await media.prepare({...group,message:[{type:'forward',data:{id:'1'}}]});
+  try { assert.ok(result.images.length > 0); assert.deepEqual(calls,['1','2','3','4']); } finally { await result.cleanup(); }
+  media.remember({...group,message:[{type:'mface',data:{url:'https://gchat.qpic.cn/sticker'}}]});
+  const [entry] = media.listStickers(group); assert.ok(entry.id);
+  assert.equal(media.outgoingSticker(group,entry.id).data.file,'https://gchat.qpic.cn/sticker');
+  assert.throws(()=>media.outgoingSticker({...group,group_id:'other'},entry.id));
+  media.remember({...group,message:[{type:'image',data:{url:'file:///secret'}}]});
+  assert.equal(media.listStickers(group).length,1);
+});
 test('图片、表情、卡片、语音等均可触发；文字伪造 @ 无法触发', () => {
   for (const type of ['image', 'mface', 'face', 'record', 'video', 'file', 'json', 'xml', 'reply', 'forward', 'dice', 'rps', 'location', 'contact', 'music', 'unknown']) {
     assert.ok(incomingText({ ...group, message: [at, { type, data: { id: '123', name: '附件' } }] }, ['300000001']));

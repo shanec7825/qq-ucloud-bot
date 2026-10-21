@@ -3,7 +3,7 @@ import { readJSON, saveJSON } from './core.mjs';
 import { DigestRepository, serializeFile } from './digest-repository.mjs';
 
 export function memoryScope(value) {
-  if (value !== 'global' && !/^(group|private):\d{5,15}$/.test(value || '') && !/^profile:[A-Za-z0-9_-]{1,40}$/.test(value || '')) throw new Error('记忆范围无效。');
+  if (!/^account:[A-Za-z0-9_-]{1,40}:(global|profile:[A-Za-z0-9_-]{1,40}(?::(?:group|private):\d{5,15})?)$/.test(value || '') && value !== 'global' && !/^(group|private):\d{5,15}$/.test(value || '') && !/^profile:[A-Za-z0-9_-]{1,40}$/.test(value || '')) throw new Error('记忆范围无效。');
   return value;
 }
 const kinds = ['fact', 'preference', 'instruction'];
@@ -15,12 +15,15 @@ export class ManagedMemory {
   constructor(root = new URL('../data/', import.meta.url)) { this.root = root; this.digests = new DigestRepository(new URL('history/', root)); }
   file() { return new URL('memory-notes.json', this.root); }
   async list() { return (await readJSON(this.file(), [])).map(normalize); }
-  context(event, { profileId } = {}) {
+  context(event, { profileId = event.profileId || '', accountId = event.accountId || 'default' } = {}) {
     const scope = `${event.message_type === 'group' ? 'group' : 'private'}:${event.message_type === 'group' ? event.group_id : event.user_id}`;
     const profileScope = /^[A-Za-z0-9_-]{1,40}$/.test(profileId || '') ? `profile:${profileId}` : null;
+    const prefix = `account:${accountId}:profile:${profileId || '_'}`;
+    const allowed = new Set([`account:${accountId}:global`, prefix, `${prefix}:${scope}`]);
+    if (accountId === 'default') { if (!profileId || !event.accountId) { allowed.add('global'); allowed.add(scope); } if (profileScope) allowed.add(profileScope); }
     return this.list().then(notes => {
       let budget = 6000;
-      return notes.filter(note => note.enabled === true && (note.scope === 'global' || note.scope === scope || (profileScope && note.scope === profileScope))).slice(-20).reverse().flatMap(({ scope, text }) => { const value = text.slice(0, budget); budget -= value.length; return value ? [{ scope, text: value }] : []; }).reverse();
+      return notes.filter(note => note.enabled === true && allowed.has(note.scope)).slice(-20).reverse().flatMap(({ scope, text }) => { const value = text.slice(0, budget); budget -= value.length; return value ? [{ scope, text: value }] : []; }).reverse();
     });
   }
   mutate(action) { return serializeFile(this.file(), action); }

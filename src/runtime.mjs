@@ -1,5 +1,13 @@
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
+import { AgentTools, ToolAgent } from './agent-tools.mjs';
+import { AgentGitHub } from './agent-github.mjs';
+import { AgentDrive } from './agent-drive.mjs';
+import { AgentSchool } from './agent-school.mjs';
+import { NativeAgentTools } from './agent-native.mjs';
 import { SchoolClient, readJSON, saveJSON, notificationPlan, askAI } from './core.mjs';
 import { OneBot } from './onebot.mjs';
 import { PublicCatalog, upcoming } from './access.mjs';
@@ -15,38 +23,74 @@ import { ManagedMemory } from './managed-memory.mjs';
 import { modelEnv } from './settings.mjs';
 import { ChatGPTConnectorClient, ChatGPTResources } from './chatgpt-connectors.mjs';
 import { GroupMembers } from './group-members.mjs';
+import { RealtimeNotices } from './realtime-notices.mjs';
 import { NoticeMonitor } from './notice-monitor.mjs';
 import { moduleActive } from './plugin-modules.mjs';
 import { CodexAccount } from './codex-account.mjs';
 import { groupTemplate } from './group-templates.mjs';
-import { resolveGroupPolicy, profileSettings } from './group-policy.mjs';
+import { resolveGroupPolicy, profileSettings, resolveConversation } from './group-policy.mjs';
 import { MODULES, MODULE_IDS } from './module-registry.mjs';
 import { MessageWorkspace } from './message-workspace.mjs';
 
 const project = new URL('../', import.meta.url);
+const execute = promisify(execFile);
 export class BotRuntime {
   constructor(store, vault, { root = new URL('data/', project), botFactory = (...args) => new OneBot(...args) } = {}) {
     this.store = store; this.vault = vault; this.root = root; this.botFactory = botFactory; this.checks = {}; this.transportVersion = 0;
+    this.transports = new Map(); this.accountServices = new Map(); this.selfIds = new Map();
+    this.pendingActions = new Map(); this.agentSessions = new Map(); this.toolAudit = []; this.credentialVersion = 0;
     this.memory = new ConversationMemory(); this.notes = new ManagedMemory(root);
     this.school = new SchoolClient(new URL('session.json', root));
+    this.schoolAgent = new AgentSchool(this.school, { getUserId: async () => (await readJSON(new URL('session.json', root))).userId });
     this.catalog = new PublicCatalog(new URL('public-assignments.json', root), new URL('public/books.json', project));
     this.google = new GoogleDrive({ settings: () => store.get(), vault });
     this.connectors = new ChatGPTConnectorClient(); this.native = new ChatGPTResources(this.connectors);
     this.account = new CodexAccount();
     this.history = new HistoryDigest({ root: new URL('history/', root), ai: (q, c) => this.ai(q, c) });
-    this.proxy = { call: (...args) => { if (!this.bot) throw new Error('QQ 尚未连接，请配置 OneBot。'); return this.bot.call(...args); }, send: (target, ...args) => {
-      if (target.group_id && resolveGroupPolicy(this.store.get(), target.group_id).monitorOnly) throw new Error('监测群禁止机器人发言。');
-      if (!this.bot) throw new Error('QQ 尚未连接。'); return this.bot.send(target, ...args);
-    } };
+    this.proxy = {
+      call: (action, params, options = {}) => this.transport(options.accountId).call(action, params),
+      send: (target, text, options = {}) => {
+        const accountId = target.accountId || options?.accountId || 'default';
+        if (target.group_id && !resolveGroupPolicy(this.store.get(), target.group_id, accountId).canReply) throw new Error('\u6b64\u7fa4\u7981\u6b62\u673a\u5668\u4eba\u53d1\u8a00\u3002');
+        const { accountId: ignored, ...recipient } = target;
+        return this.transport(accountId).send(recipient, text, options);
+      },
+      sendSegments: (target, segments, options = {}) => {
+        const accountId = target.accountId || options.accountId || 'default';
+        if (target.group_id && !resolveGroupPolicy(this.store.get(), target.group_id, accountId).canReply) throw new Error('\u6b64\u7fa4\u7981\u6b62\u673a\u5668\u4eba\u53d1\u8a00\u3002');
+        const { accountId: ignored, ...recipient } = target;
+        return this.transport(accountId).sendSegments(recipient, segments, options);
+      },
+    };
     this.media = new MessageMedia(this.proxy);
     this.monitor = new NoticeMonitor({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), send: (target, text) => this.proxy.send(target, text), root: new URL('notices/', root) });
+    this.realtime = new RealtimeNotices({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), send: (target, text, options) => this.proxy.send(target, text, options) });
     this.inbox = new MessageWorkspace({ monitor: this.monitor, root });
-    this.members = new GroupMembers(this.proxy, () => this.store.get().groups.filter(group => group.enabled).map(group => group.id));
+    this.members = new GroupMembers(this.proxy, () => [...new Set([...this.store.get().groups.map(group => group.id), ...(this.store.get().bindings || []).filter(b => b.accountId === 'default' && b.kind === 'group').map(b => b.targetId)])].filter(id => resolveGroupPolicy(this.store.get(), id).canReply));
     this.handler = createMessageHandler({ bot: this.proxy, memory: this.memory, getDependencies: event => this.dependencies(event) });
+  }
+  transport(accountId = 'default') {
+    if (this.stopped) throw new Error('QQ stopped.');
+    const entry = this.transports.get(accountId);
+    const bot = entry?.bot || (accountId === 'default' ? this.bot : null);
+    if (!bot) throw new Error('QQ account is not connected.');
+    return bot;
+  }
+  services(accountId) {
+    if (accountId === 'default') return { media: this.media, members: this.members };
+    if (!this.accountServices.has(accountId)) {
+      const proxy = { call: (action, params) => this.proxy.call(action, params, { accountId }) };
+      this.accountServices.set(accountId, { media: new MessageMedia(proxy), members: new GroupMembers(proxy, () => {
+        const config = this.store.get();
+        return (config.bindings || []).filter(b => b.accountId === accountId && b.kind === 'group' && resolveGroupPolicy(config, b.targetId, accountId).canReply).map(b => b.targetId);
+      }) });
+    }
+    return this.accountServices.get(accountId);
   }
   config() {
     const config = this.store.get();
     for (const [section, module] of [['github', 'github'], ['drive', 'drive'], ['school', 'ucloud'], ['monitor', 'notices']]) config[section].enabled &&= moduleActive(this.root, module);
+    if (config.realtime) config.realtime.enabled &&= moduleActive(this.root, 'notices') && !!config.accounts.find(account => account.id === config.realtime.accountId)?.enabled;
     return config;
   }
   env(config = this.store.get()) {
@@ -55,6 +99,25 @@ export class BotRuntime {
   async ai(question, context, config = this.config()) {
     const env = this.env(config);
     return config.ai.backend === 'api' ? askAI(question, context, env) : askCodex(question, context, env);
+  }
+  agent(config) {
+    const live = () => this.config();
+    const github = config.github.enabled && config.github.authMode !== 'chatgpt' ? new AgentGitHub({ token: async () => {
+      const current = live();
+      if (!current.agent.enabled || !current.github.enabled || current.github.authMode !== config.github.authMode) throw new Error('GitHub 设置已改变。');
+      if (current.github.authMode === 'token') return this.vault.get('githubToken');
+      const { stdout } = await execute(process.env.GH_BIN || fileURLToPath(new URL('tools/gh/bin/gh.exe', project)), ['auth', 'token', '--hostname', 'github.com'], { windowsHide: true, shell: false, timeout: 10000, maxBuffer: 16000, env: { ...process.env, GH_CONFIG_DIR: fileURLToPath(new URL('gh/', this.root)), GH_HOST: 'github.com' } });
+      return stdout.trim();
+    } }) : null;
+    const drive = config.drive.enabled && config.drive.authMode === 'oauth' ? new AgentDrive({ google: this.google, canWrite: () => live().agent.enabled && live().agent.writes && live().drive.enabled && live().drive.authMode === 'oauth' && live().drive.accessMode === 'write' }) : null;
+    const providers = [...(config.github.enabled && config.github.authMode === 'chatgpt' ? ['github'] : []), ...(config.drive.enabled && config.drive.authMode === 'chatgpt' ? ['google_drive'] : [])];
+    const native = providers.length ? new NativeAgentTools({ client: this.connectors, providers }) : null;
+    const tools = new AgentTools({ owner: () => live().bot.ownerQQ, settings: () => live().agent, github, drive, native, school: config.school.enabled ? this.school : null, schoolSubmission: config.school.enabled ? this.schoolAgent : null,
+      signature: () => createHash('sha256').update(JSON.stringify([live(), this.transportVersion, this.credentialVersion, this.google.authorizationRevision || 0, this.vault.get('githubToken'), this.vault.get('openaiKey')])).digest('hex'),
+      audit: entry => { this.toolAudit.push(entry); this.toolAudit = this.toolAudit.slice(-100); },
+    });
+    tools.pending = this.pendingActions;
+    return new ToolAgent({ tools, ai: (question, context) => this.ai(question, context, config), settings: () => live().agent, sessions: config.memory.enabled ? this.agentSessions : new Map(), context: event => ({ conversation: this.memory.get(event), botName: config.bot.name }) });
   }
   resources(config) {
     const env = this.env(config), legacy = new PrivateResources(env);
@@ -75,7 +138,7 @@ export class BotRuntime {
       ...(config.drive.authMode === 'chatgpt' ? { driveQuestion: (question, event) => {
         if (!config.drive.enabled) throw new Error('Google Drive 已停用。');
         if (event.message_type !== 'private' || String(event.user_id) !== config.bot.ownerQQ) throw new Error('只有主人私聊可读取私人 Drive。');
-        return this.native.driveQuestion(question, config.memory.enabled ? 'private:' + String(event.user_id) : undefined);
+        return this.native.driveQuestion(question, config.memory.enabled ? this.memory.key(event) : undefined);
       } } : {}),
       ...(config.github.authMode === 'chatgpt' ? { githubQuestion: (question, event) => {
         if (!config.github.enabled || event.message_type !== 'private' || String(event.user_id) !== config.bot.ownerQQ) throw new Error('只有主人私聊可读取私人 GitHub。');
@@ -84,21 +147,29 @@ export class BotRuntime {
     };
   }
   dependencies(event) {
-    const base = this.config(), config = event?.message_type === 'group' ? profileSettings(base, event.group_id) : base, enabled = config.groups.filter(g => g.enabled);
+    const base = this.config(), conversation = resolveConversation(base, event), accountId = conversation.accountId;
+    const config = event ? profileSettings(base, conversation.targetId, accountId, conversation.kind) : base, enabled = config.groups.filter(g => g.enabled);
+    const services = this.services(accountId);
     if (!this.library || this.libraryRoot !== config.library.root) { this.libraryRoot = config.library.root; this.library = config.library.root ? new SharedLibrary(config.library.root) : null; }
     const catalog = config.school.enabled ? this.catalog : {
       list: async () => 'UCloud 未启用。', detail: async () => 'UCloud 未启用。', upcomingTasks: async () => [], books: () => this.catalog.books(),
     };
-    const policies = config.groups.map(group => resolveGroupPolicy(config, group.id));
-    return { enabled: !this.stopped && moduleActive(this.root, 'core'), capabilities: JSON.stringify(config), groups: policies.filter(g => g.canReply).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
-      resources: this.resources(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: this.media, members: this.members,
-      notes: config.memory.enabled ? { context: event => this.notes.context(event, { profileId: event.message_type === 'group' ? resolveGroupPolicy(config, event.group_id).profileId : '' }) } : null, monitor: this.monitor, groupTemplate: id => groupTemplate(config.groups.find(group => group.id === id)),
-      history: config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
-      persona: loadPersona, shareDocumentsWithModel: config.library.sendToModel, transportVersion: this.transportVersion,
+    const groupIds = [...new Set([...config.groups.map(g => g.id), ...(config.bindings || []).filter(b => b.accountId === accountId && b.kind === 'group').map(b => b.targetId)])];
+    const policies = groupIds.map(id => resolveGroupPolicy(config, id, accountId));
+    const observable = !this.stopped && (base.accounts?.find(a => a.id === accountId)?.enabled ?? accountId === 'default') && (!event?.transportGeneration || this.transports.get(accountId)?.generation === event.transportGeneration);
+    return { enabled: observable && (!event || !Object.hasOwn(event, 'profileId') || event.profileId === conversation.profileId) && (conversation.kind !== 'private' || conversation.enabled) && moduleActive(this.root, 'core'), observeEnabled: observable, observe: event => { this.realtime.observe(event); if (moduleActive(this.root, 'core') && conversation.enabled) services.media.remember?.(event); }, capabilities: JSON.stringify(config), groups: policies.filter(g => g.canReply).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
+      resources: this.resources(config), agent: this.agent(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: services.media, members: services.members,
+      stickers: { list: event => services.media.listStickers(event), send: (event, id) => this.proxy.sendSegments({ ...(event.message_type === 'group' ? { group_id: String(event.group_id) } : { user_id: String(event.user_id) }), accountId }, [services.media.outgoingSticker(event, id)]) },
+      notes: config.memory.enabled ? { context: event => this.notes.context(event, { profileId: conversation.profileId, accountId }) } : null, monitor: this.monitor, groupTemplate: id => groupTemplate(config.groups.find(group => group.id === id)),
+      history: accountId === 'default' && !conversation.profileId && config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
+      persona: accountId === 'default' && !conversation.profileId ? loadPersona : async () => ({ voice: [], learned: false }), shareDocumentsWithModel: config.library.sendToModel, transportVersion: this.transportVersion,
     };
   }
   apply() {
     const config = this.config(); this.memory.configure(config.memory);
+    const personaSignature = JSON.stringify([config.accounts, config.bindings, config.profiles, config.groups, config.bot, config.ai]);
+    if (this.personaSignature && this.personaSignature !== personaSignature) this.memory.clear('all');
+    this.personaSignature = personaSignature;
     const identities = new Map(config.groups.map(group => [group.id, JSON.stringify([profileSettings(config, group.id).bot, profileSettings(config, group.id).ai, group.profileId, group.template, group.templatePrompt])]));
     if (this.groupIdentities) for (const [id, identity] of this.groupIdentities) if (identities.get(id) !== identity) this.memory.clear('group:' + id);
     this.groupIdentities = identities;
@@ -108,19 +179,42 @@ export class BotRuntime {
     if (appSignature !== this.appSignature) { this.appSignature = appSignature; this.native.selections.clear(); }
     if (config.bot.ownerQQ && (config.drive.enabled && config.drive.authMode === 'chatgpt' || config.github.enabled && config.github.authMode === 'chatgpt')) this.connectors.ready().catch(() => {});
     else if (this.connectors.child) this.connectors.close();
-    const token = this.vault.get('onebotToken') || '', signature = JSON.stringify([config.qq.url, token]);
-    if (signature !== this.transportSignature) {
-      this.transportSignature = signature; this.transportVersion++; this.bot?.close(); this.bot = null;
-      this.members.clear();
-      if (token) { this.bot = this.botFactory(config.qq.url, token, this.handler); this.bot.connect(); }
+    const accounts = config.accounts || [{ id: 'default', enabled: true, url: config.qq.url }];
+    for (const [id, entry] of this.transports) if (!accounts.some(a => a.id === id && a.enabled)) {
+      entry.bot.close(); this.transports.delete(id); this.selfIds.delete(id); this.accountServices.delete(id); this.transportVersion++;
     }
+    for (const account of accounts) {
+      if (!account.enabled) continue;
+      const token = this.vault.get(account.id === 'default' ? 'onebotToken' : `onebotToken:${account.id}`) || '';
+      const url = account.id === 'default' ? config.qq.url : account.url;
+      const signature = JSON.stringify([url, token]);
+      if (this.transports.get(account.id)?.signature === signature) continue;
+      this.transports.get(account.id)?.bot.close(); this.transports.delete(account.id); this.selfIds.delete(account.id); this.accountServices.delete(account.id);
+      const generation = ++this.transportVersion;
+      if (!token) continue;
+      const entry = { signature, generation, bot: null };
+      entry.bot = this.botFactory(url, token, async incoming => {
+        if (this.stopped || this.transports.get(account.id) !== entry) return;
+        const selfId = String(incoming.self_id || '');
+        if (!/^\d{5,15}$/.test(selfId)) return;
+        const previous = this.selfIds.get(account.id);
+        if (previous && previous !== selfId || [...this.selfIds].some(([id, value]) => id !== account.id && value === selfId)) return;
+        this.selfIds.set(account.id, selfId);
+        const event = { ...incoming, accountId: account.id, transportGeneration: generation };
+        event.profileId = resolveConversation(this.config(), event).profileId;
+        return this.handler(event);
+      });
+      this.transports.set(account.id, entry); entry.bot.connect();
+    }
+    this.bot = this.transports.get('default')?.bot || null;
+
   }
   async start() {
     this.state = await readJSON(new URL('state.json', this.root), { initialized: false, known: [], sent: {} });
     if (!Array.isArray(this.state.known) || !this.state.sent || typeof this.state.sent !== 'object') throw new Error('提醒状态格式无效，请检查 data/state.json。');
     this.apply(); this.interval = setInterval(() => this.tick().catch(() => {}), 1000); this.interval.unref(); this.tick().catch(() => {});
   }
-  stop() { this.stopped = true; clearInterval(this.interval); this.bot?.close(); this.connectors.dispose(); this.account.close(); }
+  stop() { this.stopped = true; clearInterval(this.interval); for (const entry of this.transports.values()) entry.bot.close(); this.transports.clear(); this.transportVersion++; this.connectors.dispose(); this.account.close(); }
   async sync() {
     if (this.schoolLoginBusy) throw new Error('学校登录正在进行，请稍后同步。');
     if (!this.config().school.enabled) throw new Error('请先启用 UCloud 插件与作业功能。');
@@ -137,6 +231,7 @@ export class BotRuntime {
     try {
       if (!this.lastMemoryPrune || Date.now() - this.lastMemoryPrune >= 60000) { this.memory.prune(); this.lastMemoryPrune = Date.now(); }
       const config = this.config();
+      this.realtime.tick().catch(() => {});
       if (config.school.enabled && (!this.lastPoll || Date.now() - this.lastPoll >= config.school.pollSeconds * 1000)) {
         this.lastPoll = Date.now();
         try {
@@ -165,19 +260,20 @@ export class BotRuntime {
   async status() {
     const exists = async name => { try { await access(new URL(name, this.root)); return true; } catch { return false; } };
     return {
+      accounts: (this.store.get().accounts || []).map(a => ({ id: a.id, name: a.name, enabled: a.enabled, connected: this.transports.get(a.id)?.bot.socket?.readyState === WebSocket.OPEN, selfId: this.selfIds.get(a.id) || '', configured: !!this.vault.get(a.id === 'default' ? 'onebotToken' : `onebotToken:${a.id}`) })),
       qq: { connected: this.bot?.socket?.readyState === WebSocket.OPEN, configured: !!this.vault.get('onebotToken'), accountConfigured: !!this.store.get().bot.ownerQQ },
       configured: { ucloud: await exists('session.json'), github: this.store.get().github.authMode === 'chatgpt' ? this.connectors.apps.has('github') : !!this.vault.get('githubToken') || await exists('gh/hosts.yml'), drive: this.store.get().drive.authMode === 'chatgpt' ? this.connectors.apps.has('google_drive') : !!this.vault.get('googleTokens') || await exists('rclone.conf') },
-      checks: this.checks, pendingMessages: this.handler.isBusy(), settingsRevision: this.store.get().revision,
+      checks: this.checks, realtime: this.realtime.status(), pendingMessages: this.handler.isBusy(), settingsRevision: this.store.get().revision,
       modules: Object.fromEntries(MODULE_IDS.map(name => [name, moduleActive(this.root, name)])),
     };
   }
   workspace() {
     const config = this.config();
-    return { revision: config.revision, modules: MODULES.map(module => ({ ...module, active: moduleActive(this.root, module.id) })), profiles: config.profiles,
+    return { revision: config.revision, modules: MODULES.map(module => ({ ...module, active: moduleActive(this.root, module.id) })), profiles: config.profiles, accounts: config.accounts, bindings: config.bindings,
       groups: [...new Set([...config.groups.map(group => group.id), ...config.monitor.groups])].map(id => resolveGroupPolicy(config, id)) };
   }
-  async groups() {
-    const rows = await this.proxy.call('get_group_list', {});
+  async groups(accountId = 'default') {
+    const rows = await this.proxy.call('get_group_list', {}, { accountId });
     return (Array.isArray(rows) ? rows : []).map(g => ({ id: String(g.group_id), name: String(g.group_name || '').slice(0, 80) }));
   }
   async check(service) {

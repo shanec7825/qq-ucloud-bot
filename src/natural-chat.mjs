@@ -5,6 +5,16 @@ const libraryIntent = /pdfs?|教材|课本|课件|书上|这本书|哪些书|章
 
 export async function routeNatural(text, event, deps) {
   const isOwner = ownerPrivate(event, deps.owner);
+  const sticker = /^\/(?:表情包|表情)(?:\s+([A-Za-z0-9_-]+))?$/.exec(text.trim());
+  if (sticker && deps.stickers) {
+    const available = deps.stickers.list(event);
+    if (!sticker[1]) return available.length ? '本会话可用表情包：\n' + available.map((item, index) => `${index + 1}. ${item.name}（${item.id}）`).join('\n') + '\n发送 /表情包 编号 即可使用。' : '先在本会话发一张表情包，再用 /表情包 查看。';
+    const selected = /^\d+$/.test(sticker[1]) ? available[Number(sticker[1]) - 1] : available.find(item => item.id === sticker[1]);
+    if (!selected) return '没有找到这个表情包，请先发送 /表情包 查看当前列表。';
+    await deps.stickers.send(event, selected.id); return '已发送。';
+  }
+  const agentAnswer = await deps.agent?.answer(text, event);
+  if (agentAnswer != null) return agentAnswer;
   if (text.startsWith('/') && !text.startsWith('/AI ')) return routeCommand(text, event, deps);
   const question = text.replace(/^\/AI\s+/, '').trim();
   const notices = await deps.monitor?.answer(question, event);

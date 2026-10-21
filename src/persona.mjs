@@ -26,7 +26,7 @@ export class ConversationMemory {
     if (!enabled) { this.clear('all'); return; }
     for (const session of this.sessions.values()) { session.entries = session.entries.slice(-this.limit); session.background = groupContext ? session.background.slice(-groupContextLimit) : []; }
   }
-  key(event) { return event.message_type === 'group' ? `group:${event.group_id}` : `private:${event.user_id}`; }
+  key(event) { const namespace = event.accountId ? `account:${event.accountId}:profile:${event.profileId || '_'}:` : ''; return namespace + (event.message_type === 'group' ? `group:${event.group_id}` : `private:${event.user_id}`); }
   describe(event, assistant = false) {
     const id = String(event.user_id ?? event.sender?.user_id ?? 'unknown');
     return { speaker: assistant || id === String(event.self_id) ? '机器人' : event.message_type === 'group' ? '群友-' + createHash('sha256').update(this.key(event) + ':' + id).digest('hex').slice(0, 10) : '用户',

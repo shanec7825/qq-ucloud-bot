@@ -25,12 +25,13 @@ export function segments(event) {
 }
 
 const names = { image: '图片或表情包', mface: '商城表情包', face: 'QQ表情', record: '语音', video: '视频', file: '文件', reply: '引用消息', forward: '合并转发', node: '转发节点', json: '分享卡片', xml: '分享卡片', share: '链接分享', contact: '联系人卡片', location: '位置', music: '音乐', dice: '骰子', rps: '猜拳', markdown: 'Markdown', lightapp: '小程序', poke: '戳一戳', shake: '窗口抖动' };
-export function contentText(event) {
+export function contentText(event, depth = 0) {
+  if (depth > 4) return '[转发嵌套已截断]';
   return segments(event).map(({ type, data = {} }) => {
     if (type === 'text') return String(data.text || '');
     if (type === 'at') return '';
     if (type === 'face') return `[QQ表情：${faceName(data)}]`;
-    if (type === 'node' && Array.isArray(data.content)) return '[转发节点] ' + contentText({ message: data.content });
+    if (type === 'node' && Array.isArray(data.content)) return '[转发节点] ' + contentText({ message: data.content.slice(0, 40) }, depth + 1);
     const detail = type === 'json' || type === 'xml' ? data.data : data.summary || data.name || data.title || (['dice', 'rps'].includes(type) ? data.id || data.result : '');
     return `[${names[type] || '消息类型:' + type}${detail ? '：' + String(detail).slice(0, 1200) : ''}]`;
   }).join(' ').trim().slice(0, 4000);

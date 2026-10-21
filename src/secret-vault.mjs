@@ -4,6 +4,7 @@ import { readJSON, saveJSON } from './core.mjs';
 import { protectSchoolSecret, unprotectSchoolSecret } from './school-secret.mjs';
 
 const keys = ['onebotToken', 'openaiKey', 'githubToken', 'googleClientSecret', 'googleTokens'];
+const knownKey = key => keys.includes(key) || /^onebotToken:[A-Za-z0-9_-]{1,40}$/.test(key);
 export class SecretVault {
   constructor(root = new URL('../data/', import.meta.url), env = process.env, codec) {
     this.root = root; this.env = env; this.codec = codec; this.queue = Promise.resolve();
@@ -22,14 +23,14 @@ export class SecretVault {
     };
   }
   get(key) {
-    if (!keys.includes(key)) throw new Error('未知密钥字段。');
+    if (!knownKey(key)) throw new Error('未知密钥字段。');
     if (Object.hasOwn(this.values, key)) return this.values[key];
     return ({ onebotToken: this.env.ONEBOT_ACCESS_TOKEN, openaiKey: this.env.OPENAI_API_KEY, githubToken: this.env.GH_TOKEN })[key] || null;
   }
-  flags() { return Object.fromEntries(keys.map(key => [key, !!this.get(key)])); }
+  flags() { return Object.fromEntries([...new Set([...keys, ...Object.keys(this.values).filter(knownKey)])].map(key => [key, !!this.get(key)])); }
   set(patch) {
     const work = this.queue.catch(() => {}).then(async () => {
-      if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(key => !keys.includes(key) || patch[key] !== null && (typeof patch[key] !== 'string' || patch[key].length > 16000 || patch[key].includes('\0')))) throw new Error('密钥字段无效或过长。');
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(key => !knownKey(key) || patch[key] !== null && (typeof patch[key] !== 'string' || patch[key].length > 16000 || patch[key].includes('\0')))) throw new Error('密钥字段无效或过长。');
       const values = { ...this.values, ...patch };
       if (JSON.stringify(values).length > 30000) throw new Error('密钥配置过大。');
       const ciphertext = await this.codec.protect(JSON.stringify(values));

@@ -6,8 +6,10 @@ export function createMessageHandler({ bot, groups, memory, getDependencies, ...
   const queues = new Map(), seen = new Set();
   const handler = async event => {
     const current = () => getDependencies ? getDependencies(event) : { ...deps, groups };
-    if (current().enabled === false) return;
     if (event.post_type !== 'message' || !['group', 'private'].includes(event.message_type) || String(event.user_id) === String(event.self_id)) return;
+    // The observer owns its bounded queue; slow alert processing never delays chat.
+    try { if (current().observeEnabled !== false) Promise.resolve(current().observe?.(event)).catch(() => {}); } catch {}
+    if (current().enabled === false) return;
     if (event.message_type === 'group' && !current().groups.includes(String(event.group_id))) return;
     const text = incomingText(event, current().groups);
     const key = `${memory.key(event)}:${event.message_id}`;

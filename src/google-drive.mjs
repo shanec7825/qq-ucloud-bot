@@ -10,16 +10,18 @@ async function bounded(response, limit = 1024 * 1024) {
 }
 export class GoogleDrive {
   constructor({ settings, vault, fetcher = fetch, now = Date.now }) { this.settings = settings; this.vault = vault; this.fetcher = fetcher; this.now = now; this.pending = new Map(); }
-  begin(origin, session) {
+  begin(origin, session, { write = false } = {}) {
     const config = this.settings().drive;
+    if (write && config.accessMode !== 'write') throw new Error('请先在管理台明确启用 Drive 写入授权。');
+    const scope = write ? 'https://www.googleapis.com/auth/drive' : DRIVE_SCOPE;
     if (!config.clientId || !this.vault.get('googleClientSecret')) throw new Error('请先保存 Google OAuth Client ID 和 Client Secret。');
     if (this.pending.size >= 20) throw new Error('授权请求过多，请稍后再试。');
     const state = randomBytes(32).toString('base64url'), verifier = randomBytes(48).toString('base64url');
     const redirect = origin + '/oauth/google/callback';
     for (const [key, value] of this.pending) if (value.expires < this.now()) this.pending.delete(key);
-    this.pending.set(state, { verifier, redirect, session, clientId: config.clientId, clientSecret: this.vault.get('googleClientSecret'), expires: this.now() + 600000 });
+    this.pending.set(state, { verifier, redirect, session, scope, clientId: config.clientId, clientSecret: this.vault.get('googleClientSecret'), expires: this.now() + 600000 });
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: redirect, response_type: 'code', scope: DRIVE_SCOPE,
+    url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: redirect, response_type: 'code', scope,
       access_type: 'offline', prompt: 'consent', state, code_challenge_method: 'S256', code_challenge: createHash('sha256').update(verifier).digest('base64url') }).toString();
     return { url: url.href, redirectURI: redirect };
   }
@@ -33,8 +35,10 @@ export class GoogleDrive {
     const config = this.settings().drive;
     if (config.clientId !== request.clientId || this.vault.get('googleClientSecret') !== request.clientSecret) throw new Error('Google 客户端配置已改变，请重新连接。');
     const token = await this.tokenRequest({ client_id: request.clientId, client_secret: request.clientSecret, code, redirect_uri: request.redirect, grant_type: 'authorization_code', code_verifier: request.verifier });
-    if (!token.access_token || !token.refresh_token || token.scope && !token.scope.split(' ').includes(DRIVE_SCOPE)) throw new Error('未取得 Drive 只读授权或续期凭据，请重新授权。');
-    await this.vault.set({ googleTokens: JSON.stringify({ access_token: token.access_token, refresh_token: token.refresh_token, expires: this.now() + Number(token.expires_in || 3600) * 1000, clientId: request.clientId }) });
+    if (!token.access_token || !token.refresh_token || token.scope && !token.scope.split(' ').includes(request.scope)) throw new Error('未取得要求的 Drive 授权或续期凭据，请重新授权。');
+    if (request.scope !== DRIVE_SCOPE && config.accessMode !== 'write') throw new Error('写入授权配置已改变，请重新连接。');
+    await this.vault.set({ googleTokens: JSON.stringify({ access_token: token.access_token, refresh_token: token.refresh_token, scopes: (token.scope || request.scope).split(' '), expires: this.now() + Number(token.expires_in || 3600) * 1000, clientId: request.clientId }) });
+    this.authorizationRevision = (this.authorizationRevision || 0) + 1;
   }
   async accessToken() {
     const saved = this.vault.get('googleTokens');

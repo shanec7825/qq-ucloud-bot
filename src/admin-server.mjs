@@ -80,21 +80,21 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       }
       if (route === '/api/secrets' && req.method === 'PUT') {
         const input = await body(req), allowed = ['onebotToken', 'openaiKey', 'githubToken', 'googleClientSecret'];
-        if (!input || typeof input !== 'object' || Object.keys(input).some(key => !allowed.includes(key))) fail(400, '不支持的密钥字段。');
+        if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !allowed.includes(key) && !(/^onebotToken:[A-Za-z0-9_-]{1,40}$/.test(key) && store.get().accounts?.some(account => key === 'onebotToken:' + account.id)))) fail(400, '不支持的密钥字段。');
         if (Object.hasOwn(input, 'googleClientSecret') && input.googleClientSecret !== vault.get('googleClientSecret')) input.googleTokens = null;
-        const flags = await vault.set(input); runtime.checks = {}; runtime.apply(); json({ secrets: flags }); return;
+        const flags = await vault.set(input); runtime.credentialVersion = (runtime.credentialVersion || 0) + 1; runtime.checks = {}; runtime.apply(); json({ secrets: flags }); return;
       }
       if (route === '/api/ucloud/login' && req.method === 'POST') {
         if (loginBusy || runtime.syncing) fail(409, '学校登录或同步正在进行，请稍后重试。');
         const input = await body(req);
         if (typeof input.username !== 'string' || !input.username.trim() || input.username.length > 80 || typeof input.password !== 'string' || !input.password || input.password.length > 500) fail(400, '请填写学号和密码。');
         loginBusy = true; runtime.schoolLoginBusy = true;
-        try { const result = await login(input.username.trim(), input.password); input.password = ''; await saveJSON(new URL('session.json', root), result); runtime.lastPoll = 0; runtime.checks.ucloud = { ok: true, message: '学校登录成功，密码未保存；可同步作业。', checkedAt: new Date().toISOString() }; json({ ok: true }); }
+        try { const result = await login(input.username.trim(), input.password); input.password = ''; await saveJSON(new URL('session.json', root), result); runtime.credentialVersion = (runtime.credentialVersion || 0) + 1; runtime.lastPoll = 0; runtime.checks.ucloud = { ok: true, message: '学校登录成功，密码未保存；可同步作业。', checkedAt: new Date().toISOString() }; json({ ok: true }); }
         catch (error) { fail(400, /CAPTCHA/.test(error.code || '') ? '学校要求验证码，请使用浏览器登录备用流程。' : '学校登录未成功，请检查账号、密码或学校网络。'); }
         finally { input.password = ''; loginBusy = false; runtime.schoolLoginBusy = false; }
         return;
       }
-      if (route === '/api/google/authorize' && req.method === 'POST') { json(runtime.google.begin(origin, token)); return; }
+      if (route === '/api/google/authorize' && req.method === 'POST') { json(runtime.google.begin(origin, token, { write: store.get().drive.accessMode === 'write' })); return; }
       if (/^\/api\/check\/(github|drive|ucloud|model)$/.test(route) && req.method === 'POST') { json(await runtime.check(route.split('/').at(-1))); return; }
       if (route === '/api/groups' && req.method === 'GET') { json({ groups: await runtime.groups() }); return; }
       if (route === '/api/codex/account' && req.method === 'GET') { json(await runtime.account.status()); return; }

@@ -16,8 +16,8 @@ using Microsoft.Web.WebView2.WinForms;
 
 [assembly: AssemblyTitle("QQ Agent")]
 [assembly: AssemblyDescription("QQ Agent Windows desktop launcher")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("2.0.0.0")]
+[assembly: AssemblyFileVersion("2.0.0.0")]
 
 namespace QQAgentDesktop {
     internal static class Program {
@@ -141,7 +141,7 @@ namespace QQAgentDesktop {
                 if (entry.FullName.StartsWith("data/") || entry.FullName.StartsWith("tools/") || Path.GetFileName(path).StartsWith(".env")) throw new Exception("安装包包含不允许覆盖的配置目录。");
                 Directory.CreateDirectory(Path.GetDirectoryName(path)); entry.ExtractToFile(path, true);
             }
-            File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), "1.3.0");
+            File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), "2.0.0");
         }
         void SaveWorkspace() { if (!smoke) File.WriteAllText(Path.Combine(Program.AppData, "desktop.json"), Program.Json.Serialize(new { workspace = workspace })); }
         async Task SelectWorkspace() { using (var dialog = new FolderBrowserDialog { Description = "选择现有 QQ Agent 项目目录，配置和授权会继续使用", SelectedPath = workspace }) {
@@ -186,7 +186,7 @@ namespace QQAgentDesktop {
             refreshInFlight = true; int generation = navigationGeneration; string folder = workspace;
             try { var status = await Service("status", 25000);
                 if (!CurrentNavigation(generation, folder) || busy || !home) return;
-                status["workspace"] = folder; status["version"] = "1.3.0";
+                status["workspace"] = folder; status["version"] = "2.0.0";
                 if (GetBool(status, "webuiAvailable")) { await OpenPageCore("/webui/", generation, folder); return; }
                 if (home && browser.CoreWebView2 != null) await browser.CoreWebView2.ExecuteScriptAsync("window.renderStatus&&window.renderStatus(" + Program.Json.Serialize(status) + ")");
                 if (!CurrentNavigation(generation, folder) || busy || !home) return;

@@ -12,7 +12,7 @@ export function ownerPrivate(event, owner) {
 }
 
 export function replyTarget(event) {
-  return event.message_type === 'group' ? { group_id: String(event.group_id) } : { user_id: String(event.user_id) };
+  return { ...(event.message_type === 'group' ? { group_id: String(event.group_id) } : { user_id: String(event.user_id) }), ...(event.accountId ? { accountId: event.accountId } : {}) };
 }
 
 export class PublicCatalog {
