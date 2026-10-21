@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { PAGE_COPY, presentSchema } from './webui/copy.mjs';
 
 const pages = { core: ['bot','accounts','profiles','bindings','groups','ai','agent','notes','conversations','memory','history','library','digests','qq'], github:['github'], drive:['drive'], ucloud:['school'], notices:['realtime','monitor','inbox','reports'] };
 const labels = {bot:'基本设置',accounts:'QQ 账号',profiles:'人格池',bindings:'群聊 / 私聊人格',groups:'群组规则',ai:'模型与登录',agent:'工具与操作权限',qq:'默认账号连接',memory:'记忆设置',history:'历史摘要设置',library:'资料库',notes:'记忆管理',digests:'群摘要',conversations:'最近会话',github:'GitHub',drive:'Google Drive',school:'教学云',realtime:'即时提醒',monitor:'定时总结',reports:'总结记录',inbox:'待办事项'};
@@ -11,7 +12,7 @@ function memorySelection(f, note) {
   const scope=note?.scope||'', scoped=/^account:([^:]+):(?:global|profile:([^:]+)(?::(group|private):(\d+))?)$/.exec(scope), legacy=/^(group|private):(\d+)$/.exec(scope);
   return {accountId:f['note_account_'+f.resource]??scoped?.[1]??'default',profileId:f['note_profile_'+f.resource]??(scope.endsWith(':global')?'*':scoped?.[2]==='_'?'':scoped?.[2]??/^profile:(.+)$/.exec(scope)?.[1]??''),kind:f['note_kind_'+f.resource]??scoped?.[3]??legacy?.[1]??'shared',targetId:scoped?.[4]??legacy?.[2]??''};
 }
-export function initialNativeSchema(module='core') { return [field('page','select',pages[module][0],{label:'配置分类',reactive:true,options:choices(pages[module].map(value=>({value,label:labels[value]})))}),field('help','text','请等待配置载入。编辑后先点击 NapCat 原生“保存”，再切换分类。')]; }
+export function initialNativeSchema(module='core') { return [field('page','select',pages[module][0],{label:'设置分类',reactive:true,options:choices(pages[module].map(value=>({value,label:PAGE_COPY[value].title})))}),field('help','text','正在读取设置。编辑后请先保存，再切换分类。')]; }
 
 export function createNativeConfigAdapter({module='core',bridge,now=Date.now,ttlMs=30*60*1000,maxSessions=64}) {
   const sessions = new Map(); let lastResult; let saveQueue=Promise.resolve();
@@ -39,22 +40,22 @@ export function createNativeConfigAdapter({module='core',bridge,now=Date.now,ttl
       const ops=['groups','profiles','notes','accounts','bindings'].includes(p)?['edit','delete']:p==='digests'?['edit','clear']:p==='conversations'?['view','clear']:p==='inbox'?['view','status']:['view'];
       result.push(field('operation_'+p,'select',ops.includes(f.operation)?f.operation:ops[0],{label:'保存时执行',reactive:true,options:choices(ops)}));
       if(personaMemory) {
-        if(!resource) result.push(field('preview','text','请先选择或新建人格，再管理它的记忆。'));
+        if(!resource) result.push(field('preview','text','先创建并保存角色，再添加长期记忆。'));
         else {
           result.push(field('memory_account','select',memoryAccount,{label:'记忆所属 QQ 账号',reactive:true,options:choices((cfg.accounts||[]).map(a=>({value:a.id,label:a.name})))}));
           result.push(field('persona_note','select',selectedNote?.id||'new',{label:'选择记忆',reactive:true,options:choices([{value:'new',label:'新增记忆'},...personaNotes.map(n=>({value:n.id,label:n.text.slice(0,70)}))])}));
           if(f.operation==='delete') result.push(field(keyBase+'confirm','boolean',false,{label:'确认删除所选记忆'}));
           else edit(selectedNote?Object.fromEntries(['text','kind','tags','enabled'].map(k=>[k,selectedNote[k]])):{text:'',kind:'fact',tags:[],enabled:true});
-          result.push(field('preview','text',`人格：${resource.name}\n记忆属于所选账号，不会串到其他账号。更具体的群聊 / 私聊记忆可在“记忆管理”设置。`));
+          result.push(field('preview','text',`角色：${resource.name}\n记忆仅用于所选 QQ。指定群聊或私聊的记忆请到“长期记忆”设置。`));
         }
       }
       else if(['delete','clear'].includes(f.operation)) result.push(field(keyBase+'confirm','boolean',false,{label:'确认删除 / 清空所选记录'}));
       else if(p==='groups') edit(resource||{id:'',name:'',enabled:true,historyEnabled:false,template:'auto',templatePrompt:'',profileId:''});
-      else if(p==='profiles') {edit(resource||{name:'',model:'',systemPrompt:''}); if(resource) result.push(field('preview','text',safe('同一人格可用于多个群和私聊。使用“管理内容”切换到此人格的记忆。\n当前绑定数：'+((cfg.bindings||[]).filter(b=>b.profileId===resource.id).length+cfg.groups.filter(g=>g.profileId===resource.id).length))));}
+      else if(p==='profiles') {edit(resource||{name:'',model:'',systemPrompt:''}); if(resource) result.push(field('preview','text',safe('此角色可用于多个群和私聊。选择“角色的长期记忆”管理它记住的内容。\n当前使用数：'+((cfg.bindings||[]).filter(b=>b.profileId===resource.id).length+cfg.groups.filter(g=>g.profileId===resource.id).length))));}
       else if(p==='accounts') {edit(resource?{...resource,...(resource.id==='default'?{url:cfg.qq.url}:{})}:{name:'',enabled:true,url:'ws://127.0.0.1:3002',defaultProfileId:''});add('onebotToken','','string');result.push(field('preview','text','每个账号连接自己的 NapCat / OneBot 端口。人格名字只影响聊天身份，不会改 QQ 的真实昵称。群聊 / 私聊的绑定优先于账号默认人格。'));}
       else if(p==='bindings') edit(resource||{accountId:'default',kind:'group',targetId:'',profileId:'',enabled:true});
       else if(p==='notes') {
-        for(const [key,label,value,options] of [['note_account','QQ 账号',noteScope.accountId,(cfg.accounts||[]).map(a=>({value:a.id,label:a.name}))],['note_profile','记忆所属人格',noteScope.profileId,[{value:'',label:'基础人格'},{value:'*',label:'整个账号共享'},...cfg.profiles.map(a=>({value:a.id,label:a.name}))]],['note_kind','生效会话',noteScope.kind,[{value:'shared',label:'所有会话'},{value:'group',label:'指定群聊'},{value:'private',label:'指定私聊'}]]]) result.push(field(key+'_'+f.resource,'select',value,{label,reactive:true,options:choices(options)}));
+        for(const [key,label,value,options] of [['note_account','QQ 账号',noteScope.accountId,(cfg.accounts||[]).map(a=>({value:a.id,label:a.name}))],['note_profile','记忆所属人格',noteScope.profileId,[{value:'',label:'基础角色'},{value:'*',label:'整个账号共享'},...cfg.profiles.map(a=>({value:a.id,label:a.name}))]],['note_kind','生效会话',noteScope.kind,[{value:'shared',label:'所有会话'},{value:'group',label:'指定群聊'},{value:'private',label:'指定私聊'}]]]) result.push(field(key+'_'+f.resource,'select',value,{label,reactive:true,options:choices(options)}));
         if(noteScope.kind!=='shared') add('targetId',noteScope.targetId,'string');
         edit(resource?Object.fromEntries(['text','kind','tags','enabled'].map(k=>[k,resource[k]])):{text:'',kind:'fact',tags:[],enabled:true});
       }
@@ -69,8 +70,8 @@ export function createNativeConfigAdapter({module='core',bridge,now=Date.now,ttl
     if(p==='school') {add('username','','string'); add('password','','string');}
     if(p==='realtime') result.push(field('preview','text','实时接收 → 合并短时间重复消息 → 判断重要性 → 私聊提醒。无需 @；仅处理所选账号在线后收到的指定群消息。'));
     if(p==='monitor') result.push(field('preview','text','按间隔整理导出的历史消息，可回看离线内容。私聊汇报需单独开启。'));
-    if(p==='agent') result.push(field('preview','text','仅主人私聊可用。远端修改先展示具体操作，回复“/确认 验证码”后执行。账号、人格或配置变更会使旧确认失效。'));
-    return result;
+    if(p==='agent') result.push(field('preview','text','仅管理员私聊可用。修改前会展示具体操作；回复“/确认 验证码”后执行。更换账号、角色或配置后需重新确认。'));
+    return presentSchema(result, p);
   }
   async function controller(ui,initialConfig) { session(initialConfig).ui=ui; await ui.updateSchema(schema(initialConfig)); }
   async function onConfigChange(ui,key,value,currentConfig) { if(!['page','profile_section','memory_account','persona_note'].includes(key) && !/^(?:resource_|operation_|note_)/.test(key)) return; const f={...currentConfig,[key]:value}; session(f); if(key==='page') {f.resource='new';f.operation='edit';} await ui.updateSchema(schema(f)); }
@@ -92,7 +93,7 @@ export function createNativeConfigAdapter({module='core',bridge,now=Date.now,ttl
     let settingsChanged=false,accountSecret;
     if(personaMemory) {if(!existing) throw new Error('请先选择已有的人格。');if(f.operation==='delete') {if(!personaNote) throw new Error('请选择已有记忆。');await request('DELETE','memory/notes/'+personaNote.id);} else await request('PUT','memory/notes',{scope:`account:${memoryAccount}:profile:${existing.id}`,text:values.text,kind:values.kind,tags:String(values.tags||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean),enabled:values.enabled,...(personaNote?{id:personaNote.id}:{})});}
     else if(['groups','profiles','accounts','bindings'].includes(p)) {
-      if(f.operation==='delete') {if(!existing) throw new Error('请选择已有记录。');if(p==='accounts' && existing.id==='default') throw new Error('默认账号不能删除，可停用连接。');if(p==='accounts' && cfg.bindings.some(b=>b.accountId===existing.id)) throw new Error('账号仍有会话绑定，请先删除绑定。');if(p==='profiles' && (cfg.groups.some(g=>g.profileId===existing.id)||(cfg.bindings||[]).some(b=>b.profileId===existing.id)||(cfg.accounts||[]).some(a=>a.defaultProfileId===existing.id))) throw new Error('该方案仍被群组使用或被账号 / 私聊绑定，请先修改绑定。'); cfg[p]=rows.filter(x=>x.id!==existing.id);}
+      if(f.operation==='delete') {if(!existing) throw new Error('请选择已有记录。');if(p==='accounts' && existing.id==='default') throw new Error('默认账号不能删除，可停用连接。');if(p==='accounts' && cfg.bindings.some(b=>b.accountId===existing.id)) throw new Error('账号仍有会话绑定，请先删除绑定。');if(p==='profiles' && (cfg.groups.some(g=>g.profileId===existing.id)||(cfg.bindings||[]).some(b=>b.profileId===existing.id)||(cfg.accounts||[]).some(a=>a.defaultProfileId===existing.id))) throw new Error('这个角色仍被账号或聊天使用，请先更换对应的角色分配。'); cfg[p]=rows.filter(x=>x.id!==existing.id);}
       else {const v={...values}; delete v.confirm;delete v.onebotToken;if(p!=='groups') v.id=existing?.id||randomUUID().replaceAll('-','');if(p==='accounts') {if(v.id==='default') cfg.qq.url=v.url;if(values.onebotToken?.trim()) accountSecret={[v.id==='default'?'onebotToken':'onebotToken:'+v.id]:values.onebotToken};} if(existing) rows.splice(rows.indexOf(existing),1,v); else rows.push(v);}
       settingsChanged=true;
     } else if(p==='notes') {if(f.operation==='delete') {if(!existing) throw new Error('请选择已有记录。'); await request('DELETE','memory/notes/'+existing.id);} else {const selected=memorySelection(f,existing);if(selected.profileId==='*' && selected.kind!=='shared') throw new Error('整个账号共享的记忆请使用“所有会话”；指定会话请先选择人格。');if(!cfg.accounts.some(a=>a.id===selected.accountId)||selected.profileId && selected.profileId!=='*'&&!cfg.profiles.some(a=>a.id===selected.profileId)) throw new Error('请选择已有账号和人格。');values.scope=`account:${selected.accountId}:`+(selected.profileId==='*'?'global':`profile:${selected.profileId||'_'}`+(selected.kind==='shared'?'':`:${selected.kind}:${values.targetId}`));delete values.targetId;values.tags=String(values.tags||'').split(/[,，]/).map(x=>x.trim()).filter(Boolean); await request('PUT','memory/notes',{...values,...(existing?{id:existing.id}:{})});}}

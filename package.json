@@ -26,6 +26,7 @@
     "test:ui": "node scripts/check-native-napcat-ui.mjs",
     "test:workspace-ui": "node scripts/check-native-napcat-ui.mjs",
     "test:extension-ui": "node scripts/check-extension-ui.mjs",
+    "ui:build": "npm --prefix ui/napcat run build",
     "desktop:prepare": "node scripts/prepare-desktop.mjs",
     "desktop:build": "node scripts/build-windows.mjs",
     "plugins:build": "node scripts/build-plugins.mjs"

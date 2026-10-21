@@ -39,7 +39,8 @@ export async function plugin_init(ctx) {
   native = createNativeConfigAdapter({ module, bridge });
   registerBridge(ctx, bridge, native);
   ctx.router.static('/ui', 'webui');
-  ctx.router.page({ title: PLUGIN_MODULES.find(item => item.id === pluginId).name, path: 'settings', htmlFile: 'webui/index.html', description: '分类管理设置、账号、人格与记忆' });
+  const pageTitles = { core:'机器人', github:'GitHub', drive:'云盘', ucloud:'教学云', notices:'群消息' };
+  ctx.router.page({ title: pageTitles[module], path: 'settings', htmlFile: 'webui/index.html', description: '插件设置' });
 
   await activity(true);
   ctx.logger?.info?.('模块配置已接入 NapCat 插件卡片。');

@@ -1,0 +1,4 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+html,body,#root{min-height:100%;background:transparent}body{margin:0;color:hsl(var(--heroui-foreground));font-family:ui-sans-serif,system-ui,"Microsoft YaHei",sans-serif}*{box-sizing:border-box}summary{min-height:32px}button,input,textarea{font:inherit}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}

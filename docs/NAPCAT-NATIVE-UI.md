@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-10-21 · 2.0.0 本地候选版
 
-QQ Agent 的五个插件均使用 NapCat 自带插件卡片和配置弹窗。控件、下拉框、开关、保存按钮、手机布局与深浅主题由原版 NapCat 前端提供。没有自定义 iframe，也没有修改前端资源。
+QQ Agent 的五个插件均使用 NapCat 自带插件卡片和配置弹窗。控件、下拉框、开关、保存按钮、手机布局与深浅主题由原版 NapCat 前端提供。原生配置弹窗由 NapCat 直接渲染。扩展页面另外使用相同版本 HeroUI 组件，放入 NapCat 官方 iframe 容器；详情见 EXTENSION-UI.md。两种入口都不修改 NapCat 前端资源。
 
 运行 `npm run test:ui`。需要已安装的 `tools/napcat/napcat/static` 原版资源和 Playwright 可启动的 Edge（可用 `CAPTURE_BROWSER` 指定其他浏览器）。
 

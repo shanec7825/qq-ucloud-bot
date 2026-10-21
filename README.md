@@ -1,98 +1,118 @@
-# QQ Agent for Windows
+# QQ Agent
 
-一个有固定桌面入口的 QQ AI 机器人。登录 QQ、切换账号、设置模型和插件，都可以在 Windows 应用里完成；关闭窗口后可从托盘、桌面或开始菜单回来。
+在 QQ 里和 AI 聊天，也能让它帮你查资料、看作业、留意群通知。
 
-支持自定义机器人昵称和提示词、群内 @ 对话、图片与表情理解、共享教材查询、北邮 UCloud 作业、GitHub / Google Drive 连接，以及通知群历史整理和重要事项私聊汇报。
+这是一个 Windows 桌面应用。登录和设置使用 NapCat 的界面；窗口关闭后会收起到托盘，双击图标就能回来。
 
-## 2.0.0 本地候选版：多账号与人格、可确认工具
+## 开始使用
 
-**更新日期：2026-10-21。** 新候选版增加独立 OneBot 账号、人格池、群聊/私聊人格绑定与按账号/人格隔离的记忆，仍使用 NapCat 原生配置面板。每个账号需要独立登录的 NapCat 实例。见 [账号与人格](docs/ACCOUNT-PERSONAS.md)。
+到 [下载页面](https://github.com/shanec7825/qq-ucloud-bot/releases) 选择 Windows x64 版本：
 
-群通知分为两条独立路径：实时重要提醒按所选账号分析在线文字，默认合并 10 秒，无需 QCE；定时历史整理使用默认账号的 QCE 历史并保存报告。
+- **安装版**：下载名称以 `QQ-Agent-Setup-` 开头的 `.exe`，安装后从桌面或开始菜单打开。
+- **便携版**：下载 `QQ-Agent-…-win-x64.zip`，完整解压后运行里面的 `QQAgent.exe`。不要只复制 exe。
+- **已经有 NapCat**：直接安装 [独立插件](docs/PLUGIN-DISTRIBUTION.md)，无需再安装桌面应用。
 
-工具代理仅限主人私聊，默认关闭，写入也默认关闭；写操作先展示具体内容，再由本人用 5 分钟有效的一次性 QQ 确认码授权。支持能力取决于连接方式，ChatGPT 插件保持只读；独立 GitHub / Drive 写入及 UCloud 个人文字作业提交有明确权限与确认边界。详见 [2.0.0 候选说明](docs/releases/v2.0.0.md)。
+需要 Windows 10 / 11 x64、.NET Framework 4.8 和 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。具体下载文件以发行页面为准。
 
-2.0.0 已通过 149 项本地测试和原版 NapCat 隔离界面验证；真实 QQ 收发、Drive/GitHub 写入及学校提交尚未验收。推送 main 后由 GitHub Actions 构建并发布，下面的版本下载链接在流水线成功后可用；安装不会自动替换正在运行的应用。
+### 第一次打开
 
-## 下载与安装
+1. 点击 **准备运行组件**，完成后点击 **启动机器人**。如果已有这个项目，先用 **选择已有项目** 指定原目录。
+2. 打开 **QQ 登录**，用你要作为机器人的 QQ 扫码登录。这个入口也在任务栏托盘图标的右键菜单中。
+3. 在 NapCat 的 **扩展页面 → 机器人 → 回答模型** 中，选择 ChatGPT 登录或自己的 API 服务，完成登录或填写设置，再保存。
+4. 回到 QQ，给机器人发一条私聊消息，确认它能回复。
 
-从 [GitHub Releases](https://github.com/shanec7825/qq-ucloud-bot/releases/latest) 下载 Windows x64 发行包：
+想在群里使用，再到 **群聊回复** 添加群号、打开回复开关，然后在群里真正 @ 机器人。
 
-- **推荐安装包**：`QQ-Agent-Setup-2.0.0-x64.exe`，安装后创建桌面和开始菜单入口。
-- **便携版**：`QQ-Agent-2.0.0-win-x64.zip`，完整解压后运行 `QQ-Agent/QQAgent.exe`；不要只复制 exe。
-- **校验文件**：`SHA256SUMS.txt`。
+## 它能做什么
 
-需要 Windows 10/11 x64、.NET Framework 4.8 和 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。安装包内含 Node 24 LTS、WebView2 SDK 运行库与干净的机器人后端，不含 QQ 登录缓存、账号、密码、学校会话、云盘凭据或个人配置。当前发行版未做发布者代码签名。
+- **日常聊天**：私聊直接提问，群聊 @ 后回复；也可发图片提问，识图能力取决于所用模型。
+- **不同的角色**：给机器人设名字和说话风格，也能为不同的群或好友分配不同角色。
+- **记住你的习惯**：保存事实、偏好和回答要求，按 QQ 账号、角色及聊天范围分别使用。
+- **查询资料**：按需连接 GitHub、Google 云盘，或共享本机指定目录里的资料。
+- **作业与通知**：查询北邮教学云作业；从群消息中提取重要通知、截止时间和待办。
+- **多个 QQ**：同时连接多个已登录的 NapCat 实例，分别设置角色和记忆。
 
-## 单独下载 NapCat 插件
+## 从哪里设置
 
-已有 NapCat 的用户可下载 [整套插件 ZIP](https://github.com/shanec7825/qq-ucloud-bot/releases/download/v2.0.0/QQ-Agent-Plugins-2.0.0-win-x64.zip)，也可按需下载：
+进入 NapCat 的 **扩展页面**，选择对应插件。插件管理中每张卡片的配置齿轮也可以使用。
 
-| 插件 | 下载 |
+| 你想做的事 | 打开哪里 |
 | --- | --- |
-| 机器人核心（先安装） | [napcat-plugin-qq-agent.zip](https://github.com/shanec7825/qq-ucloud-bot/releases/download/v2.0.0/napcat-plugin-qq-agent.zip) |
-| GitHub | [napcat-plugin-agent-github.zip](https://github.com/shanec7825/qq-ucloud-bot/releases/download/v2.0.0/napcat-plugin-agent-github.zip) |
-| Google Drive | [napcat-plugin-agent-drive.zip](https://github.com/shanec7825/qq-ucloud-bot/releases/download/v2.0.0/napcat-plugin-agent-drive.zip) |
-| UCloud | [napcat-plugin-agent-ucloud.zip](https://github.com/shanec7825/qq-ucloud-bot/releases/download/v2.0.0/napcat-plugin-agent-ucloud.zip) |
-| 群通知整理 | [napcat-plugin-agent-notices.zip](https://github.com/shanec7825/qq-ucloud-bot/releases/download/v2.0.0/napcat-plugin-agent-notices.zip) |
+| 改机器人名字、默认语气或管理员 QQ | 机器人 → 机器人身份 |
+| 更换回答模型或登录 ChatGPT | 机器人 → 回答模型 |
+| 让某个群可以 @ 机器人 | 机器人 → 群聊回复 |
+| 新建角色，或给群和好友指定角色 | 机器人 → 角色与语气 / 会话角色分配 |
+| 添加第二个 QQ | 机器人 → QQ 账号连接 |
+| 添加长期记忆或调整近期上下文 | 机器人 → 长期记忆 / 记忆与上下文 |
+| 连接仓库、云盘或教学云 | GitHub / 云盘 / 教学云 |
+| 接收重要群消息，或定时整理通知 | 群消息 → 群消息提醒 / 群消息定时整理 |
 
-独立包适用于 Windows x64，核心内含 Node 与后端，其他模块共用同一后端。安装、连接配置、升级和 NapCat 白名单限制见 [插件安装说明](docs/PLUGIN-DISTRIBUTION.md)。GitHub 下载不表示已经收录官方市场。
+编辑后先保存，再切换设置分类。更多选项见 [配置手册](docs/CONFIGURATION.md)。
 
-## 群场景与输出模板
+## 两种群消息功能有什么区别
 
-在机器人核心的“群组”页，每群默认“AI 自动选择”。同一次回答中按当前话题选用游戏群、年级群或课程群格式；普通闲聊保持自然表达，不额外发起模板分类请求。可以固定场景、查看格式示例，并添加这个群的补充要求。模板不改变群内 @ 回复和通知群禁言规则。
+**群消息提醒**：机器人在线时，收到关注群的重要消息后，合并相关内容并私聊提醒你。它不会补读离线消息。
 
-桌面导航只保留一条侧边栏；进入 NapCat 后使用其自己的导航，顶部“工作台”可返回。
+**群消息定时整理**：按设定的间隔回看历史消息，整理通知和待办。需要本机聊天记录导出服务；结果可保留在后台，也可私聊发送。
 
-## 第一次使用
+两种功能默认关闭。列入定时整理的群会保持静默，不发送群回复；暂停整理也不会解除这条规则。详细用法见 [群消息与提醒](docs/GROUP-NOTICES.md)。
 
-1. 打开 **QQ Agent**。
-2. 有现成项目时，点“选择已有项目”；配置、模型和授权继续使用原目录。需要先将项目更新到含桌面支持的版本。
-3. 全新使用时，点“准备运行组件”。应用从官方 GitHub 发行页下载并校验 NapCat 和需要的 Codex 组件，下载可能需要几分钟。
-4. 点“启动机器人”，再点 **“QQ 登录”**。扫码、验证码或设备验证由本人完成。
-5. 点“机器人与插件设置”，从对应插件卡片进入配置。普通聊天不要求填写主人 QQ。
+## 常见问题
 
-QQ 登录属于 NapCat 的 QQ 账号登录；管理网页的 Web Login 是另一层本机管理认证。桌面版会使用本机已有管理会话进入页面，不把管理密钥放进网址。
+### ChatGPT 订阅和 API 怎么选？
 
-关闭窗口后收起到系统托盘，双击托盘图标即可重新打开。
+已有 ChatGPT 账号时，可以通过官方 Codex 登录，使用账号可用的模型和额度。也可以填写自己的 OpenAI 兼容 API；API 单独计费，不会在订阅不可用时自动切换。
 
-## 按需启用的插件
+### 多个 QQ 要分别扫码吗？
 
-| 插件 | 功能 |
-| --- | --- |
-| QQ Agent · 机器人核心 | 昵称、提示词、模型、ChatGPT 登录、群组与记忆、共享教材 |
-| GitHub | ChatGPT 已授权连接器、独立 Token 或本机 gh 登录 |
-| Google Drive | ChatGPT 已授权连接器、Google OAuth 或本机 rclone 登录 |
-| UCloud · 北邮教学云 | 学校登录、近期截止作业与私聊提醒 |
-| 群通知整理 | 实时重要提醒、定时历史整理、报告与独立接收人 |
+要。每个 QQ 都需要一个独立登录的 NapCat 实例和 OneBot 端口。新增连接记录不会自动登录 QQ；额外账号的群聊还需要设置对应的会话分配。见 [多账号与角色设置](docs/ACCOUNT-PERSONAS.md)。
 
-配置直接位于 NapCat **插件管理 → 配置齿轮**，由原生配置面板渲染，没有 iframe、内层侧栏或独立皮肤。选择分类和记录后，通过 NapCat 的“保存”提交当前编辑；切换分类前应先保存。启动桌面版不会重新启用你明确停用的现有模块。
+### 为什么私聊能回复，群里没反应？
 
-默认通过官方 Codex 的 ChatGPT 登录使用订阅可用模型，默认 `gpt-6-luna`；也可配置 OpenAI 兼容 API。API 单独计费，不会在订阅失败时自动切换。其他兼容模型可使用本程序检索到的资料正文，ChatGPT 的登录凭据不会交给其他模型；正文会发送给你所选的模型服务。
+先确认这个群已开放回复，并在 QQ 中选择机器人的真实 @，而不是只输入它的名字。如果群被列入定时整理，它会保持静默。
 
-## 通知群与消息范围
+### 关闭窗口会停止机器人吗？
 
-读取、去重、模型整理、私聊推送及重试边界见 [群消息整理与推送说明](docs/GROUP-NOTICES.md)。
+不会，窗口会收起到托盘。右键托盘图标，在 **运行管理 → 停止机器人** 中停止后台；选择 **退出桌面程序** 会保留后台运行。
 
-通知两种模式默认关闭；选择目标群与账号并保存后启用。实时提醒只处理在线文字；定时模式读取历史。监测列表中的群禁止机器人发言，包括 @ 回复。可以私聊问“最近有什么”“历史记录有什么”，也可把新发现的重要事项主动发给指定 QQ；报告包含原文依据。
+### 私人资料会开放给群成员吗？
 
-批量整理针对 QQ 实际可读取的历史文字，受时间范围与条数限制；不保证读取新账号看不到的旧历史，也不批量解析历史图片、语音和附件正文。普通聊天仍只在群里被明确 @ 时回复。
+GitHub、云盘等私人连接供管理员私聊使用。群成员可查询的是你明确设置的共享资料目录。检索到的内容会交给当前选择的模型服务，请按实际需要配置。
 
-## 数据与升级
+### 升级会丢设置吗？
 
-默认独立工作区为 `%LOCALAPPDATA%\QQAgent\workspace`；已有项目继续使用所选目录。机器人配置、授权与报告在工作区 `data/`，登录组件在 `tools/`。卸载桌面程序不删除工作区。切换 Windows 用户或电脑时，DPAPI 加密授权需要重新设置。
+已有项目继续使用原目录。默认工作区在 `%LOCALAPPDATA%\QQAgent\workspace`，设置、授权和记录保存在工作区中；卸载桌面应用不会删除它。升级前建议备份工作区，遇到问题不要直接删除 `data/` 或 `tools/`。
 
-更新安装包会更新应用文件；不要把旧工作区的 `.env`、`data/` 或 `tools/` 上传到 GitHub，也不要在升级时删除它们。已有源码项目可继续按原方式运行 `npm start`，桌面版优先复用本机正在运行的服务。
+## 进一步了解
 
-## 开发与构建
+[Windows 使用说明](README.Windows.md) · [插件安装](docs/PLUGIN-DISTRIBUTION.md) · [配置手册](docs/CONFIGURATION.md) · [版本说明](https://github.com/shanec7825/qq-ucloud-bot/releases) · [第三方许可](THIRD_PARTY.md)
+
+<details>
+<summary>从源码运行与构建</summary>
+
+本地运行需要 Node.js 24 或更新版本。完整的连接与授权步骤见配置手册。
 
 ```powershell
-npm.cmd ci
-npm.cmd test
-npm.cmd run desktop:prepare
-npm.cmd run desktop:build
+npm ci
+npm start
 ```
 
-构建需 Windows x64，使用 Windows 自带 C# 编译器。准备脚本从微软 NuGet、Node 和 Inno Setup 官方源获取已锁定组件并校验 SHA512/SHA256。2.0.0 候选构建输出位于 `release/2.0.0/`，包括安装包、便携包和校验清单；产物不会混入 Git 源码。
+修改扩展页前端后，重新构建：
 
-详细设置、学校登录和原有命令行部署见 [配置手册](docs/CONFIGURATION.md)。第三方组件与许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+```powershell
+npm ci --prefix ui/napcat
+npm run ui:build
+```
+
+在 Windows x64 上构建桌面版与插件包：
+
+```powershell
+npm test
+npm run desktop:prepare
+npm run desktop:build
+npm run plugins:build
+```
+
+构建结果位于 `release/`。界面验证命令为 `npm run test:ui` 和 `npm run test:extension-ui`，使用隔离数据；真实 QQ、外部账号授权及提交操作仍需另行验证。
+
+</details>

@@ -38,7 +38,7 @@ test('version 1 settings migrate without losing names/model/permissions and reje
   const malformed = configured(); delete malformed.profiles; assert.throws(() => validateSettings(malformed));
   for (const numericId of [0, 123]) {
     const numericProfile = configured(); numericProfile.profiles[0].id = numericId; numericProfile.groups[0].profileId = numericId;
-    assert.throws(() => validateSettings(numericProfile), /方案无效/);
+    assert.throws(() => validateSettings(numericProfile), /角色设置有误/);
     const numericReference = configured(); numericReference.groups[0].profileId = numericId;
     assert.throws(() => validateSettings(numericReference), /方案必须存在/);
   }
