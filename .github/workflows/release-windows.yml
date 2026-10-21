@@ -4,6 +4,10 @@ on:
     branches: [main]
     paths:
       - package.json
+      - package-lock.json
+      - src/**
+      - napcat-plugin/**
+      - public/**
       - desktop/**
       - scripts/build-windows.mjs
       - scripts/prepare-desktop.mjs
@@ -70,8 +74,13 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; leaving its assets unchanged."
-            exit 0
+            TAG_COMMIT=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)
+            if [ "$TAG_COMMIT" = "$RELEASE_COMMIT" ]; then
+              echo "Release $TAG already represents this commit."
+              exit 0
+            fi
+            echo "::error::Release $TAG belongs to $TAG_COMMIT; bump the package version before publishing $RELEASE_COMMIT."
+            exit 1
           fi
           mapfile -d '' ASSETS < <(find artifacts -type f -print0)
           gh release create "$TAG" "${ASSETS[@]}" --target "$RELEASE_COMMIT" --title "QQ Agent $VERSION for Windows" --notes-file "docs/releases/$TAG.md"

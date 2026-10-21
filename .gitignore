@@ -9,3 +9,6 @@ qrcode.png
 !.env.example
 __pycache__/
 *.pyc
+guild1.db
+guild1.db-shm
+guild1.db-wal

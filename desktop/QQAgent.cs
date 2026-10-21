@@ -16,8 +16,8 @@ using Microsoft.Web.WebView2.WinForms;
 
 [assembly: AssemblyTitle("QQ Agent")]
 [assembly: AssemblyDescription("QQ Agent Windows desktop launcher")]
-[assembly: AssemblyVersion("2.0.0.0")]
-[assembly: AssemblyFileVersion("2.0.0.0")]
+[assembly: AssemblyVersion("2.0.1.0")]
+[assembly: AssemblyFileVersion("2.0.1.0")]
 
 namespace QQAgentDesktop {
     internal static class Program {
@@ -100,6 +100,15 @@ namespace QQAgentDesktop {
                 if (!IsProject(workspace) && File.Exists(saved)) { try { workspace = (string)Program.Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(saved))["workspace"]; } catch { } }
                 if (!IsProject(workspace) && IsProject(Environment.CurrentDirectory)) workspace = Environment.CurrentDirectory;
                 if (!IsProject(workspace)) { workspace = Path.Combine(Program.AppData, "workspace"); await Task.Run((Action)ExtractWorkspace); }
+                else if (File.Exists(Path.Combine(workspace, ".qq-agent-managed")) && !Directory.Exists(Path.Combine(workspace, ".git"))) {
+                    string current = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+                    Version previous;
+                    if (!Version.TryParse(File.ReadAllText(Path.Combine(workspace, ".qq-agent-managed")).Trim(), out previous)) throw new Exception("工作区版本记录无效，请先备份并检查该目录。");
+                    if (previous < new Version(current)) {
+                        if (System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(endpoint => endpoint.Port == 6099)) throw new Exception("工作区需要升级，请先退出正在运行的 NapCat 后台，再重新打开桌面程序。配置和授权会保留。");
+                        await Task.Run((Action)ExtractWorkspace);
+                    }
+                }
                 SaveWorkspace();
                 environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Program.AppData, smoke ? "WebView2-smoke" : "WebView2"));
                 await browser.EnsureCoreWebView2Async(environment);
@@ -128,16 +137,38 @@ namespace QQAgentDesktop {
         }
         void ExtractWorkspace() {
             Directory.CreateDirectory(workspace);
-            if (Directory.GetFiles(workspace).Length > 0 && !File.Exists(Path.Combine(workspace, ".qq-agent-managed"))) throw new Exception("默认工作区已有其他文件，请通过“选择已有项目”指定目录。");
+            if ((File.GetAttributes(workspace) & FileAttributes.ReparsePoint) != 0) throw new Exception("工作区包含目录重定向，未自动升级。");
+            if (Directory.GetFileSystemEntries(workspace).Length > 0 && !File.Exists(Path.Combine(workspace, ".qq-agent-managed"))) throw new Exception("默认工作区已有其他文件，请通过“选择已有项目”指定目录。");
             string zip = Path.Combine(Program.InstallDirectory, "backend.zip");
-            using (var archive = ZipFile.OpenRead(zip)) foreach (var entry in archive.Entries) {
+            using (var archive = ZipFile.OpenRead(zip)) {
+            var entries = archive.Entries.Where(entry => !entry.FullName.EndsWith("/")).ToArray();
+            foreach (var entry in entries) {
+                string relative = entry.FullName.Replace('\\', '/');
+                if (relative.Split('/').Any(part => part == ".." || part.StartsWith(".env", StringComparison.OrdinalIgnoreCase)) || new[] { "data/", "tools/", ".git/" }.Any(prefix => relative.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) || Path.IsPathRooted(relative)) throw new Exception("安装包包含不允许覆盖的路径。");
+                string check = workspace;
+                foreach (string part in relative.Split('/')) {
+                    check = Path.Combine(check, part);
+                    if ((File.Exists(check) || Directory.Exists(check)) && (File.GetAttributes(check) & FileAttributes.ReparsePoint) != 0) throw new Exception("工作区包含文件或目录重定向，未自动升级。");
+                }
+            }
+            if (File.Exists(Path.Combine(workspace, ".qq-agent-managed"))) {
+                string backup = Path.Combine(workspace, "data", "code-backups", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff") + ".zip");
+                Directory.CreateDirectory(Path.GetDirectoryName(backup));
+                using (var snapshot = ZipFile.Open(backup, ZipArchiveMode.Create)) foreach (var entry in entries) {
+                    string previous = Path.GetFullPath(Path.Combine(workspace, entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
+                    if (!previous.StartsWith(Path.GetFullPath(workspace).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new Exception("安装包包含无效路径。");
+                    if (File.Exists(previous)) snapshot.CreateEntryFromFile(previous, entry.FullName);
+                }
+            }
+            foreach (var entry in archive.Entries) {
                 string path = Path.GetFullPath(Path.Combine(workspace, entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
                 if (!path.StartsWith(Path.GetFullPath(workspace).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new Exception("安装包包含无效路径。");
                 if (entry.FullName.EndsWith("/")) { Directory.CreateDirectory(path); continue; }
                 if (entry.FullName.StartsWith("data/") || entry.FullName.StartsWith("tools/") || Path.GetFileName(path).StartsWith(".env")) throw new Exception("安装包包含不允许覆盖的配置目录。");
                 Directory.CreateDirectory(Path.GetDirectoryName(path)); entry.ExtractToFile(path, true);
             }
-            File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), "2.0.0");
+            }
+            File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
         }
         void SaveWorkspace() { if (!smoke) File.WriteAllText(Path.Combine(Program.AppData, "desktop.json"), Program.Json.Serialize(new { workspace = workspace })); }
         async Task SelectWorkspace() { using (var dialog = new FolderBrowserDialog { Description = "选择现有 QQ Agent 项目目录，配置和授权会继续使用", SelectedPath = workspace }) {
@@ -182,11 +213,11 @@ namespace QQAgentDesktop {
             refreshInFlight = true; int generation = navigationGeneration; string folder = workspace;
             try { var status = await Service("status", 25000);
                 if (!CurrentNavigation(generation, folder) || busy || !home) return;
-                status["workspace"] = folder; status["version"] = "2.0.0";
+                status["workspace"] = folder; status["version"] = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
                 if (GetBool(status, "webuiAvailable")) { await OpenPageCore("/webui/", generation, folder); return; }
                 if (home && browser.CoreWebView2 != null) await browser.CoreWebView2.ExecuteScriptAsync("window.renderStatus&&window.renderStatus(" + Program.Json.Serialize(status) + ")");
                 if (!CurrentNavigation(generation, folder) || busy || !home) return;
-                progress.Text = GetBool(status, "webuiAvailable") ? "NapCat 原版 WebUI" : "后台未运行 · 首次使用先准备组件，再启动机器人";
+                progress.Text = status.ContainsKey("workspaceError") ? GetText(status, "workspaceError") : GetBool(status, "webuiAvailable") ? "NapCat 原版 WebUI" : "后台未运行 · 首次使用先准备组件，再启动机器人";
             } catch (Exception error) { if (CurrentNavigation(generation, folder) && !busy && home) progress.Text = error.Message; }
             finally { refreshInFlight = false; }
         }
