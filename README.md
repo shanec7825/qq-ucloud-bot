@@ -83,6 +83,12 @@ GitHub、云盘等私人连接供管理员私聊使用。群成员可查询的�
 
 已有项目继续使用原目录。默认工作区在 `%LOCALAPPDATA%\QQAgent\workspace`，设置、授权和记录保存在工作区中；卸载桌面应用不会删除它。升级前建议备份工作区，遇到问题不要直接删除 `data/` 或 `tools/`。
 
+## 开源许可
+
+本项目中由项目作者拥有授权权利的原创代码采用 [Apache License 2.0](LICENSE) 开源。你可以根据该许可证使用、修改和分发代码，并须遵守保留许可声明、说明修改等相关条款。
+
+NapCat、Node.js、WebView2 等第三方软件、组件和素材**不因此改为 Apache License 2.0**，仍遵守各自的许可证及使用限制。详情见 [第三方许可说明](THIRD_PARTY.md) 和 [licenses/](licenses/)。
+
 ## 进一步了解
 
 [Windows 使用说明](README.Windows.md) · [插件安装](docs/PLUGIN-DISTRIBUTION.md) · [配置手册](docs/CONFIGURATION.md) · [版本说明](https://github.com/shanec7825/qq-ucloud-bot/releases) · [第三方许可](THIRD_PARTY.md)
