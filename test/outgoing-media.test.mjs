@@ -62,10 +62,10 @@ test('QQ collection downloads current images persistently and refuses cross-conv
   assert.equal(item.scope,'default:private:20000001'); assert.equal(downloads,1);
 }));
 
-test('Token Plan and ordinary MiMo endpoints synthesize assistant text with selectable voice and style', async () => {
-  for(const baseURL of [SPEECH_DEFAULTS.baseURL,'https://api.xiaomimimo.com/v1']){
+test('MiMo API and China Token Plan endpoints synthesize with matching keys, selectable voice and style', async () => {
+  for(const [baseURL,key] of [['https://api.xiaomimimo.com/v1','sk-fixture'],[SPEECH_DEFAULTS.baseURL,'tp-fixture']]){
     let request;
-    const client=speech({settings:()=>({...SPEECH_DEFAULTS,enabled:true,baseURL,voice:'Mia',style:'Speak warmly'}),key:()=>baseURL.includes('token-plan')?'tp-fixture':'sk-fixture',fetcher:async(url,options)=>{request={url,...options};return new Response(JSON.stringify({choices:[{message:{audio:{data:wav().toString('base64')}}}]}));}});
+    const client=speech({settings:()=>({...SPEECH_DEFAULTS,enabled:true,baseURL,voice:'Mia',style:'Speak warmly'}),key:()=>key,fetcher:async(url,options)=>{request={url,...options};return new Response(JSON.stringify({choices:[{message:{audio:{data:wav().toString('base64')}}}]}));}});
     const part=await client.synthesize('Hello');assert.equal(part.type,'record');assert.equal(part.data.file,'base64://'+wav().toString('base64'));
     assert.equal(request.url,baseURL+'/chat/completions');assert.equal(request.redirect,'error');
     const body=JSON.parse(request.body);assert.equal(body.messages.at(-1).role,'assistant');assert.equal(body.messages.at(-1).content,'Hello');assert.equal(body.audio.voice,'Mia');assert.equal(body.audio.format,'wav');assert.match(body.messages[0].content,/Speak warmly/);
@@ -76,9 +76,11 @@ test('Token Plan and ordinary MiMo endpoints synthesize assistant text with sele
 test('speech rejects missing key, mismatched endpoint, disabled mode, oversize text and malformed service responses', async () => {
   let requests=0; const fetcher=async()=>{requests++;throw Error('unexpected');};
   await assert.rejects(()=>speech({key:()=>'',fetcher}).synthesize('hello'),/Key/);
+  await assert.rejects(()=>speech({key:()=> 'invalid-key',fetcher}).synthesize('hello'),/sk-|tp-|ttp-/);
   await assert.rejects(()=>speech({settings:()=>({...SPEECH_DEFAULTS,enabled:false}),fetcher}).synthesize('hello'),/未启用/);
   await assert.rejects(()=>speech({settings:()=>({...SPEECH_DEFAULTS,enabled:true,baseURL:'https://evil.test'}),fetcher}).synthesize('hello'),/官方/);
-  await assert.rejects(()=>speech({settings:()=>({...SPEECH_DEFAULTS,enabled:true,baseURL:'https://api.xiaomimimo.com/v1'}),fetcher}).synthesize('hello'),/专用地址/);
+  await assert.rejects(()=>speech({settings:()=>({...SPEECH_DEFAULTS,enabled:true,baseURL:'https://evil.test'}),fetcher}).synthesize('hello'),/官方/);
+  await assert.rejects(()=>speech({settings:()=>({...SPEECH_DEFAULTS,enabled:true,baseURL:'https://api.xiaomimimo.com/v1'}),fetcher}).synthesize('hello'),/不匹配/);
   await assert.rejects(()=>speech({fetcher}).synthesize('x'.repeat(501)),/500/);assert.equal(requests,0);
   await assert.rejects(()=>speech({fetcher:async()=>new Response('secret-should-not-leak',{status:401})}).synthesize('hello'),error=>/401/.test(error.message)&&!error.message.includes('secret-should-not-leak'));
   await assert.rejects(()=>speech({fetcher:async()=>new Response(JSON.stringify({choices:[{message:{audio:{data:png.toString('base64')}}}]}))}).synthesize('hello'),/WAV/);
@@ -117,7 +119,7 @@ test('speech settings migrate additively, validate official endpoints and expose
   const writes=[],state={settings:cfg,secrets:{mimoKey:true}};
   const adapter=createNativeConfigAdapter({bridge:{request:async(method,path,value)=>{if(method==='GET')return {status:200,data:path==='state'?state:path==='memory'?{notes:[],digests:[],conversations:[]}: {items:[],reports:[]}};writes.push({path,value});if(path==='settings')state.settings=value.settings;return {status:200,data:{ok:true}};}}});
   const f=await adapter.getConfig();f.page='speech';const fields=adapter.schema(f);const key=fields.find(f=>f.key.endsWith('__mimoKey'));assert.equal(key.default,'');
-  assert.ok(fields.find(f=>f.key.endsWith('__baseURL')).options.some(o=>o.value.includes('token-plan-cn')));
+  assert.ok(fields.find(f=>f.key.endsWith('__baseURL')).options.some(o=>o.value==='https://token-plan-cn.xiaomimimo.com/v1'));
   f[key.key]='tp-fixture';await adapter.setConfig(f);assert.equal(writes.find(w=>w.path==='secrets').value.mimoKey,'tp-fixture');
 });
 

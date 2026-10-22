@@ -25,7 +25,7 @@ test('preset TTS keeps the selected voice and separates fixed and per-message in
   await speech.synthesize('明天见。','fixture',{style:'轻快期待，句尾轻微上扬，明天加重音'});
   const body=request().body;assert.equal(body.audio.voice,'茉莉');assert.equal(body.model,'mimo-v2.5-tts');
   assert.deepEqual(body.messages.at(-1),{role:'assistant',content:'明天见。'});
-  assert.match(body.messages[0].content,/固定表达要求（优先遵守）.*语速平稳/);assert.match(body.messages[0].content,/本条表达指导.*轻快期待/);assert.ok(!body.messages.at(-1).content.includes('指导'));
+  assert.match(body.messages[0].content,/固定表达要求（优先遵守）.*语速平稳/);assert.match(body.messages[0].content,/本条 MiMo TTS 指导.*轻快期待/);assert.ok(!body.messages.at(-1).content.includes('指导'));
 });
 
 test('voice design uses the official no-voice audio shape and includes a persistent voice description',async()=>{
@@ -36,7 +36,7 @@ test('voice design uses the official no-voice audio shape and includes a persist
   await assert.rejects(()=>client({model:'mimo-v2.5-tts-voicedesign'}).speech.synthesize('hello'),/音色描述/);
 });
 
-test('invalid per-message directions cannot cause networking, change the voice, or replace spoken text',async()=>{
+test('invalid directions cannot cause networking and unknown speech fields cannot change voice settings or spoken text',async()=>{
   const {speech,request}=client({});
   for(const style of [null,{},'x'.repeat(301),'bad\0instruction'])await assert.rejects(()=>speech.synthesize('原文','fixture',{style}),/指导/);
   assert.equal(request(),undefined);

@@ -2,7 +2,7 @@ import { readJSON, saveJSON } from './core.mjs';
 import { templateIds } from './group-templates.mjs';
 import { migrateSettings } from './settings-migrations.mjs';
 import { writeFile } from 'node:fs/promises';
-import { AI_BACKENDS, DEEPSEEK_DEFAULTS } from './ai-providers.mjs';
+import { AI_BACKENDS, DEEPSEEK_DEFAULTS, MIMO_AI_DEFAULTS, MIMO_API_BASE_URL, MIMO_TOKEN_PLAN_CN_BASE_URL } from './ai-providers.mjs';
 import { SPEECH_DEFAULTS, SPEECH_MODELS, SPEECH_VOICES, SPEECH_ENDPOINTS } from '../napcat-plugin/speech-config.mjs';
 
 export const DEFAULT_PROMPT = '自然随意地交流，可以幽默、接梗。根据问题决定详略；需要解释时把问题讲清楚。';
@@ -19,7 +19,7 @@ const rules = {
   realtime: { enabled: bool, groups: v => Array.isArray(v) && v.length <= 20 && v.every(qq) && new Set(v).size === v.length, recipientQQ: v => v === '' || qq(v), accountId: v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v), debounceSeconds: v => integer(v, 1, 120), focus: v => text(v, 2000) },
   agent: { enabled: bool, writes: bool, maxSteps: v => integer(v, 1, 8) },
   bot: { name: v => text(v, 40) && !!v.trim(), ownerQQ: v => v === '' || qq(v), systemPrompt: v => text(v, 12000) },
-  ai: { backend: v => AI_BACKENDS.includes(v), model: v => text(v, 100) && !!v.trim(), baseURL: v => address(v, ['https:', 'http:']) && (v.startsWith('https:') || local(v)), apiModel: v => text(v, 100),
+  ai: { backend: v => AI_BACKENDS.includes(v), model: v => text(v, 100) && !!v.trim(), baseURL: v => address(v, ['https:', 'http:']) && (v.startsWith('https:') || local(v)), apiModel: v => text(v, 100), mimoModel: v => text(v, 100) && !!v.trim(),
     deepseekModel: v => text(v, 100) && !!v.trim(), deepseekThinking: bool, harnessModel: v => text(v, 100) && !!v.trim(), harnessAuth: v => ['api-key', 'account'].includes(v) },
   qq: { url: v => address(v, ['ws:', 'wss:']) && (v.startsWith('wss:') || local(v)) },
   school: { enabled: bool, pollSeconds: v => integer(v, 60, 86400), reminders: bool },
@@ -41,7 +41,7 @@ export function defaults(env = {}) {
     realtime: { enabled: false, groups: [], recipientQQ: '', accountId: 'default', debounceSeconds: 10, focus: '\u8003\u8bd5\u3001\u9009\u8bfe\u3001\u62a5\u540d\u3001\u6750\u6599\u63d0\u4ea4\u3001\u622a\u6b62\u65f6\u95f4\u3001\u8bfe\u7a0b\u8c03\u6574\u3001\u5956\u52a9\u8bc4\u4f18\u53ca\u91cd\u8981\u6d3b\u52a8\u3002' }, agent: { enabled: false, writes: false, maxSteps: 4 },
     bot: { name: env.BOT_NAME || 'slyra', ownerQQ: env.OWNER_QQ || '', systemPrompt: env.BOT_SYSTEM_PROMPT || DEFAULT_PROMPT },
     ai: { backend: AI_BACKENDS.includes(env.AI_BACKEND) ? env.AI_BACKEND : 'codex', model: env.CODEX_MODEL || 'gpt-6-luna', baseURL: env.OPENAI_BASE_URL || 'https://api.openai.com/v1', apiModel: env.OPENAI_MODEL || '',
-      ...DEEPSEEK_DEFAULTS, deepseekModel: env.DEEPSEEK_MODEL || DEEPSEEK_DEFAULTS.deepseekModel, deepseekThinking: env.DEEPSEEK_THINKING === 'true', harnessModel: env.DEEPSEEK_HARNESS_MODEL || DEEPSEEK_DEFAULTS.harnessModel, harnessAuth: env.DEEPSEEK_HARNESS_AUTH || DEEPSEEK_DEFAULTS.harnessAuth },
+      ...MIMO_AI_DEFAULTS, ...DEEPSEEK_DEFAULTS, deepseekModel: env.DEEPSEEK_MODEL || DEEPSEEK_DEFAULTS.deepseekModel, deepseekThinking: env.DEEPSEEK_THINKING === 'true', harnessModel: env.DEEPSEEK_HARNESS_MODEL || DEEPSEEK_DEFAULTS.harnessModel, harnessAuth: env.DEEPSEEK_HARNESS_AUTH || DEEPSEEK_DEFAULTS.harnessAuth },
     qq: { url: env.ONEBOT_WS_URL || 'ws://127.0.0.1:3001' },
     speech: { ...SPEECH_DEFAULTS },
     school: { enabled: !!env.OWNER_QQ, pollSeconds: Number(env.POLL_SECONDS || 900), reminders: true },
@@ -113,9 +113,14 @@ export class SettingsStore {
 }
 
 export function modelEnv(settings, secrets = {}, base = process.env) {
+  const mimoApi = ['mimo-api', 'mimo-token-plan-cn'].includes(settings.ai.backend);
+  const mimoTokenPlan = settings.ai.backend === 'mimo-token-plan-cn';
+  const mimoKey = secrets.mimoKey || base.MIMO_API_KEY || '';
   return { ...base, BOT_NAME: settings.bot.name, BOT_SYSTEM_PROMPT: settings.bot.systemPrompt, AI_BACKEND: settings.ai.backend,
-    CODEX_MODEL: settings.ai.model, OPENAI_MODEL: settings.ai.apiModel, OPENAI_BASE_URL: settings.ai.baseURL,
-    OPENAI_API_KEY: secrets.openaiKey || '', GH_TOKEN: secrets.githubToken || '', DEEPSEEK_API_KEY: secrets.deepseekKey || '',
+    CODEX_MODEL: settings.ai.model, OPENAI_MODEL: mimoApi ? settings.ai.mimoModel : settings.ai.apiModel,
+    OPENAI_BASE_URL: mimoTokenPlan ? MIMO_TOKEN_PLAN_CN_BASE_URL : mimoApi ? MIMO_API_BASE_URL : settings.ai.baseURL,
+    OPENAI_API_KEY: mimoApi ? mimoKey : secrets.openaiKey || '',
+    GH_TOKEN: secrets.githubToken || '', DEEPSEEK_API_KEY: secrets.deepseekKey || '',
     DEEPSEEK_MODEL: settings.ai.deepseekModel, DEEPSEEK_THINKING: String(settings.ai.deepseekThinking),
     DEEPSEEK_HARNESS_MODEL: settings.ai.harnessModel, DEEPSEEK_HARNESS_AUTH: settings.ai.harnessAuth };
 }

@@ -100,8 +100,8 @@ test('原生配置页切换 DeepSeek 后隐藏无关凭据，保存使用独立�
   const bridge = { async request(method, path, value) { calls.push({ method, path, value }); return { status: 200, data: path === 'state' ? state : path === 'memory' ? { notes:[],digests:[],conversations:[] } : path === 'inbox' ? {items:[]} : {} }; } };
   const adapter = createNativeConfigAdapter({ bridge }), form = await adapter.getConfig(); form.page = 'ai';
   const field = suffix => adapter.schema(form).find(row => row.key.endsWith('__' + suffix));
-  assert.equal(field('backend').options.length, 4); form[field('backend').key] = 'deepseek';
-  assert.equal(field('deepseekModel').default, 'deepseek-flash'); assert.equal(field('openaiKey'), undefined);
+  assert.equal(field('backend').options.length, 6); form[field('backend').key] = 'deepseek';
+  assert.equal(field('deepseekModel').default, 'deepseek-flash'); assert.equal(field('openaiKey'), undefined); assert.equal(field('mimoKey'), undefined);
   form[field('deepseekKey').key] = 'new-deepseek-key'; await adapter.setConfig(form);
   assert.equal(calls.find(row => row.path === 'secrets').value.deepseekKey, 'new-deepseek-key');
   const other = await adapter.getConfig(); other.page = 'ai';

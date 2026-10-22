@@ -6,6 +6,9 @@ export { SPEECH_DEFAULTS, SPEECH_VOICES, SPEECH_ENDPOINTS };
 export function validateMimoKey(key) {
   if (typeof key !== 'string' || !key.trim()) throw new Error('请先在语音设置中保存 MiMo API Key。');
   if (/\s/.test(key)) throw new Error('MiMo API Key 不能包含空白。');
+  if (/^sk-/i.test(key)) return 'api';
+  if (/^t{1,2}p-/i.test(key)) return 'token-plan';
+  throw new Error('MiMo Key 应以 sk-（按量 API）、tp- 或 ttp-（Token Plan）开头。');
 }
 export function validateWav(bytes) {
   if (bytes.length < 44 || bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WAVE') throw new Error('语音服务未返回有效 WAV 音频。');
@@ -32,9 +35,10 @@ export class XiaomiSpeech {
     if (!Array.isArray(requests) || !requests.length || requests.length > 4) throw new Error('单轮语音须为 1–4 条。');
     const config = this.settings();
     if (!config.enabled) throw new Error('语音发送未启用，请先在语音设置中开启。');
-    const key = this.key(); validateMimoKey(key);
+    const key = this.key(), keyType = validateMimoKey(key);
     if (!SPEECH_ENDPOINTS.includes(config.baseURL)) throw new Error('请选择小米官方语音服务地址。');
-    if (/^t{1,2}p-/i.test(key) && config.baseURL === SPEECH_ENDPOINTS[0]) throw new Error('Token Plan Key 请搭配 Token Plan 专用地址。');
+    const planEndpoint = config.baseURL.startsWith('https://token-plan-');
+    if (planEndpoint !== (keyType === 'token-plan')) throw new Error('MiMo Key 类型与服务地址不匹配：sk- 使用按量 API 地址，tp-/ttp- 使用对应 Token Plan 集群地址。');
     const prepared = requests.map(request => {
       if (!request || typeof request.text !== 'string' || !request.text.trim() || request.text.length > config.maxChars) throw new Error(`语音文字须为 1–${config.maxChars} 字。`);
       return { text: request.text, context: speechContext(config, request.style === undefined ? '' : request.style) };

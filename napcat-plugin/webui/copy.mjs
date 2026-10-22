@@ -1,13 +1,13 @@
 // Product vocabulary shared by the native dialog and the extension page.
 export const PAGE_COPY = {
   media: { title:'图片与表情包', group:'聊天与回复', description:'上传图片和 GIF 表情包，指定可使用的 QQ 账号与会话。' },
-  speech: { title:'语音', group:'聊天与回复', description:'调用小米 MiMo TTS，将文字和回复作为 QQ 原生语音条发送。' },
+  speech: { title:'语音', group:'聊天与回复', description:'调用小米 MiMo TTS 发送 QQ 原生语音。文字与语音可分别组织内容，像聊天一样互相补充。' },
   bot: { title:'机器人身份', group:'聊天与回复', description:'设置机器人如何自称、如何说话，以及谁能使用私人功能。' },
   profiles: { title:'角色与语气', group:'聊天与回复', description:'保存不同的名字和回答风格，供 QQ 账号、群聊或私聊使用。' },
   bindings: { title:'会话角色分配', group:'聊天与回复', description:'选择机器人 QQ、群聊或好友，再指定由哪个角色回复。', detail:'角色选择顺序：会话指定角色 → QQ 账号默认角色 → 默认 QQ 的群角色 → 机器人基础风格。未指定角色时继续沿用下一层设置。关闭这条分配会停止该会话回复。' },
   groups: { title:'群聊回复', group:'聊天与回复', description:'选择允许机器人回复的群，设置回答风格。普通群中被 @ 才会回复。', detail:'这里的群规则供所有 QQ 账号使用。群消息提醒和定时整理在“群消息与提醒”插件中设置；列入定时整理的群不会发送群回复。' },
   accounts: { title:'QQ 账号连接', group:'连接与权限', description:'连接一个或多个 QQ，并为每个账号选择默认角色。', detail:'最多 20 个账号。每个 QQ 需在对应 NapCat 实例登录，使用独立 OneBot 端口；此处新增连接不会自动登录 QQ。角色名字不会修改 QQ 昵称。' },
-  ai: { title:'回答模型', group:'连接与权限', description:'选择生成回答的模型，使用 ChatGPT 登录或自己的 API 服务。' },
+  ai: { title:'回答模型', group:'连接与权限', description:'选择生成回答的模型。MiMo 支持按量 API 与 Token Plan 中国集群；可用同一 MiMo Key 连接聊天和 TTS。' },
   agent: { title:'工具权限', group:'连接与权限', description:'决定机器人能否在管理员私聊中调用工具、提出修改操作。' },
   library: { title:'共享资料', group:'连接与权限', description:'指定群成员可查询的本机资料目录，并决定能否将检索结果交给模型。' },
   qq: { title:'默认 QQ 连接', group:'连接与权限', description:'调整默认账号的连接地址。与“QQ 账号连接”中的默认账号同步。' },
@@ -43,7 +43,7 @@ const fields = {
   profiles: { name:['名称',''], systemPrompt:['系统提示词',''] },
   bindings: { kind:['用于哪种聊天','选择群聊或私聊后，从对应列表选择对象。'], targetId:['群号或好友 QQ','从当前 QQ 的群或好友列表选择，也可手动填写。'], enabled:['允许这个会话回复','关闭后停止这段聊天的回复。'] },
   groups: { id:['群号','填写需要设置回复规则的 QQ 群号。'], name:['群备注','仅用于设置页识别，不会修改 QQ 群名。'], enabled:['在这个群回复','普通群中被 @ 时回复；定时整理群始终不回复。'], historyEnabled:['读取这个群的历史','还需在“群聊历史读取”开启总开关。'], template:['回答场景','按课程、年级或游戏场景组织回答，也可自动选择。'], templatePrompt:['这个群的补充要求','例如“先列截止时间，再说明提交方式”。'] },
-  ai: { backend:['使用哪种模型服务',''], model:['ChatGPT 模型','填写当前登录账号可用的模型名称。'], baseURL:['API 服务地址','填写 OpenAI 兼容服务的根地址。'], apiModel:['API 模型','填写服务提供方的模型名称。'] },
+  ai: { backend:['使用哪种模型服务',''], model:['ChatGPT 模型','填写当前登录账号可用的模型名称。'], baseURL:['API 服务地址','填写 OpenAI 兼容服务的根地址。'], apiModel:['API 模型','填写服务提供方的模型名称。'], mimoModel:['MiMo 模型','默认 mimo-v2.6-pro；支持 MiMo 按量 API 与 Token Plan。'] },
   agent: { enabled:['允许调用工具','仅管理员私聊可用。'], writes:['允许提出修改操作','执行前需在 QQ 中回复确认码。'], maxSteps:['每次最多调用轮数','1–8 轮。轮数越多，可连续处理的工具操作越多。'] },
   memory: { enabled:['回答时使用记忆','关闭后不使用长期记忆、近期对话和群聊背景。'], recentLimit:['保留近期对话条数','2–40 条。每个会话分别保留。'], ttlMinutes:['多久不聊就忘记上下文','1–1440 分钟。只影响近期上下文，不删除长期记忆。'], groupContext:['参考群里的近期消息','回答时一并参考同群的近期发言。'], groupContextLimit:['最多参考群消息条数','2–60 条。'] },
   history: { enabled:['从群聊历史生成背景摘要','还需为对应群开启历史读取。'] },
@@ -76,8 +76,8 @@ Object.assign(fields.groups,{enabled:['允许回复','@ 时回复'],historyEnabl
 Object.assign(fields.ai,{backend:['模型来源',''],baseURL:['API 地址',''],apiModel:['模型名','']});
 Object.assign(fields.ai,{deepseekModel:['DeepSeek 模型','默认 deepseek-flash，也可填写账号可用的模型名称。'],deepseekThinking:['深度思考','复杂问题可开启，回复可能更慢。'],harnessModel:['Harness 模型','填写所选授权方式可用的模型名称。'],harnessAuth:['Harness 授权方式','已有登录使用本机官方 Harness 账号；API Key 使用下方密钥。']});
 common.deepseekKey=['DeepSeek API Key','留空保留已保存的密钥。'];
-common.mimoKey=['MiMo API Key','留空保留'];
-fields.speech={enabled:['启用语音',''],autoReply:['自动附带语音','默认仅在请求语音时合成'],autoStyle:['按内容自动调整表达',''],baseURL:['小米服务地址',''],model:['音色方式',''],voice:['音色',''],voiceDescription:['音色描述',''],style:['固定语气与语速要求',''],maxChars:['每条语音最多字数','20–1000 字']};
+common.mimoKey=['MiMo API / Token Plan Key','按量 API 使用 sk- Key；Token Plan 使用 tp- 或 ttp- Key。回答模型与 MiMo TTS 可共用此密钥，留空保留已保存的值。'];
+fields.speech={enabled:['启用语音',''],autoReply:['自动附带语音','开启后文字与语音可分别表达；关闭后仅在请求语音时合成'],autoStyle:['按内容自动调整表达','让当前聊天模型（选择 MiMo 按量 API 或 Token Plan 时即 MiMo Agent）根据本条语音内容生成 MiMo TTS 指令；可调整语气、情绪、语速、停顿、重音、气息和音色质感，同时保持已选音色身份。'],baseURL:['小米服务地址','默认 Token Plan 中国：`https://token-plan-cn.xiaomimimo.com/v1`；也可选择按量 API 或其他 Token Plan 集群。服务地址需与 Key 类型匹配。'],model:['音色方式',''],voice:['音色',''],voiceDescription:['音色描述','每次合成可能有差异；需要声音更一致时可选预置音色'],style:['固定语气与语速要求',''],maxChars:['每条语音最多字数','20–1000 字']};
 Object.assign(fields.memory,{enabled:['使用记忆',''],recentLimit:['对话条数','2–40 条'],ttlMinutes:['保留时长（分钟）','1–1440 分钟'],groupContext:['参考群消息',''],groupContextLimit:['群消息条数','2–60 条']});
 Object.assign(fields.history,{enabled:['读取群历史','']});
 Object.assign(fields.library,{root:['资料目录',''],sendToModel:['允许模型读取','']});
@@ -88,7 +88,7 @@ Object.assign(fields.realtime,{enabled:['即时提醒',''],debounceSeconds:['合
 Object.assign(fields.monitor,{enabled:['定时整理',''],intervalMinutes:['整理间隔（分钟）','最少 15 分钟'],lookbackDays:['回看天数','1–30 天'],maxMessages:['最多消息数','20–500 条'],notify:['私聊推送','']});
 Object.assign(fields.agent,{enabled:['允许使用工具','仅管理员私聊'],writes:['允许提出修改','执行前确认'],maxSteps:['最多调用轮数','1–8 轮']});
 Object.assign(optionLabels,{codex:'ChatGPT',api:'API',chatgpt:'ChatGPT 连接',existing:'本机授权',oauth:'OAuth 授权',token:'Token',none:'仅保存',edit:'编辑',delete:'删除',clear:'清空',view:'查看',status:'修改状态'});
-Object.assign(optionLabels,{deepseek:'DeepSeek API','deepseek-harness':'DeepSeek Harness','api-key':'使用 API Key',account:'Harness 已有账号登录'});
+Object.assign(optionLabels,{deepseek:'DeepSeek API','deepseek-harness':'DeepSeek Harness','mimo-api':'MiMo API（按量计费）','mimo-token-plan-cn':'MiMo Token Plan（中国集群）','api-key':'使用 API Key',account:'Harness 已有账号登录'});
 
 export const ADVANCED_FIELDS = {groups:['template','templatePrompt','historyEnabled'],notes:['kind','tags'],memory:['recentLimit','ttlMinutes','groupContextLimit'],drive:['rootFolderId'],school:['pollSeconds'],realtime:['debounceSeconds'],monitor:['intervalMinutes','lookbackDays','maxMessages'],agent:['maxSteps']};
 export const FIELD_SECTIONS = {
@@ -103,7 +103,7 @@ export const FIELD_SECTIONS = {
   school:[['连接',['enabled','username','password']],['提醒',['reminders']]],
   drive:[['连接',['enabled','authMode','accessMode','clientId','googleClientSecret']]],
   github:[['连接',['enabled','authMode','githubToken','defaultRepo']]],
-  ai:[['模型',['backend','model','baseURL','apiModel','deepseekModel','deepseekThinking','harnessModel','harnessAuth','openaiKey','deepseekKey']]],
+  ai:[['模型',['backend','model','baseURL','apiModel','mimoModel','deepseekModel','deepseekThinking','harnessModel','harnessAuth','openaiKey','mimoKey','deepseekKey']]],
 };
 
 export function shapeSchema(schema,page,config={},state={}) {
@@ -113,8 +113,8 @@ export function shapeSchema(schema,page,config={},state={}) {
     if(f.key==='help')return false;
     const name=f.key.split('__').at(-1);
     if(page==='ai') {
-      const fields={codex:['model'],api:['baseURL','apiModel','openaiKey'],deepseek:['deepseekModel','deepseekThinking','deepseekKey'],'deepseek-harness':['harnessModel','harnessAuth',...(harnessAuth==='account'?[]:['deepseekKey'])]};
-      if(['model','baseURL','apiModel','openaiKey','deepseekModel','deepseekThinking','deepseekKey','harnessModel','harnessAuth'].includes(name) && !(fields[backend]||[]).includes(name))return false;
+      const fields={codex:['model'],api:['baseURL','apiModel','openaiKey'],'mimo-api':['mimoModel','mimoKey'],'mimo-token-plan-cn':['mimoModel','mimoKey'],deepseek:['deepseekModel','deepseekThinking','deepseekKey'],'deepseek-harness':['harnessModel','harnessAuth',...(harnessAuth==='account'?[]:['deepseekKey'])]};
+      if(['model','baseURL','apiModel','openaiKey','mimoModel','mimoKey','deepseekModel','deepseekThinking','deepseekKey','harnessModel','harnessAuth'].includes(name) && !(fields[backend]||[]).includes(name))return false;
     }
     if(page==='drive' && auth!=='oauth' && ['clientId','googleClientSecret','accessMode'].includes(name))return false;
     if(page==='github' && auth!=='token' && name==='githubToken')return false;
@@ -122,7 +122,7 @@ export function shapeSchema(schema,page,config={},state={}) {
     return true;
   }).map(f=>{
     const name=f.key.split('__').at(-1), advanced=(ADVANCED_FIELDS[page]||[]).includes(name);
-    const item={...f,advanced,description:f.type==='number'?f.description:/(?:Token|Key|Secret)$/.test(name)?'留空保留':''};
+    const item={...f,advanced,description:f.type==='number'?f.description:f.description||(/(?:Token|Key|Secret)$/.test(name)?'留空保留':'')};
     if((['backend','authMode','harnessAuth'].includes(name)||page==='speech'&&name==='model'||config.directory==='qq'&&['accountId','kind'].includes(name))&&f.type==='select')item.reactive=true;
     if(page==='ai'&&backend!=='codex'&&f.key.startsWith('action_'))item.options=f.options.filter(o=>['none','check/model'].includes(o.value));
     return item;

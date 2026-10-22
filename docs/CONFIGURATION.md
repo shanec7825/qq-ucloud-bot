@@ -20,7 +20,9 @@ npm.cmd run admin:open
 
 「人格」只编辑名称和系统提示词；「QQ 账号」保存每个 OneBot 连接及默认人格；「分配」选择账号、群或好友以及人格。每个账号需要独立运行并登录的 NapCat 实例。详细优先级和记忆隔离见 [账号与人格](ACCOUNT-PERSONAS.md)。
 
-默认使用本机官方 Codex 的 ChatGPT 登录和订阅可用模型，也可选择 OpenAI 兼容 API。API 单独配置和计费；订阅失败不会自动改用 API。私人检索正文会交给所选回答模型，ChatGPT 插件凭据不会交给第三方模型。
+默认使用本机官方 Codex 的 ChatGPT 登录和订阅可用模型，也可选择 OpenAI 兼容 API、MiMo 按量 API、MiMo Token Plan 中国集群或 DeepSeek。API 单独配置和计费；订阅失败不会自动改用 API。私人检索正文会交给所选回答模型，ChatGPT 插件凭据不会交给第三方模型。
+
+选择 MiMo 后，默认模型为 `mimo-v2.6-pro`；可按账号可用模型调整。按量 API 使用 `sk-` Key，Token Plan 中国集群使用 `tp-`/`ttp-` Key。回答模型与 TTS 共用保存的 MiMo Key；Token Plan 模式会连接 `https://token-plan-cn.xiaomimimo.com/v1`。
 
 ## 私人资料与工具代理
 

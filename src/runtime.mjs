@@ -101,11 +101,17 @@ export class BotRuntime {
     return config;
   }
   env(config = this.store.get()) {
-    return modelEnv(config, { openaiKey: this.vault.get('openaiKey'), deepseekKey: this.vault.get('deepseekKey'), githubToken: config.github.authMode === 'token' ? this.vault.get('githubToken') : '' });
+    return modelEnv(config, { openaiKey: this.vault.get('openaiKey'), deepseekKey: this.vault.get('deepseekKey'), mimoKey: this.vault.get('mimoKey'), githubToken: config.github.authMode === 'token' ? this.vault.get('githubToken') : '' });
   }
   async ai(question, context, config = this.config()) {
     const env = this.env(config);
     if (config.ai.backend === 'api') return askAI(question, context, env);
+    if (['mimo-api', 'mimo-token-plan-cn'].includes(config.ai.backend)) {
+      const tokenPlan = config.ai.backend === 'mimo-token-plan-cn';
+      const validKey = tokenPlan ? /^t{1,2}p-/i.test(env.OPENAI_API_KEY || '') : /^sk-/i.test(env.OPENAI_API_KEY || '');
+      if (!validKey) throw new Error(tokenPlan ? 'MiMo Token Plan 中国集群需要 tp- 或 ttp- Key，请在模型设置中保存 MiMo Key。' : 'MiMo 按量 API 需要 sk- Key，请在模型设置中保存 MiMo Key。');
+      return askAI(question, context, env);
+    }
     if (config.ai.backend === 'deepseek') return askDeepSeek(question, context, env);
     if (config.ai.backend === 'deepseek-harness') return askHarness(question, context, env);
     if (config.ai.backend === 'codex') return askCodex(question, context, env);
@@ -315,7 +321,7 @@ export class BotRuntime {
       const messages = { github: '连接失败，请检查 Token 权限或已有 gh 登录。', drive: '连接失败，请检查 Google 授权、Drive API 或已有 rclone 登录。', model: '连接失败，请检查模型名、登录与额度。', ucloud: '连接失败，请重新登录学校账号。' };
       const config = this.store.get();
       const native = service === 'drive' && config.drive.authMode === 'chatgpt' || service === 'github' && config.github.authMode === 'chatgpt';
-      const modelMessage = service === 'model' && ['deepseek', 'deepseek-harness'].includes(config.ai.backend) ? error instanceof TypeError ? 'DeepSeek 网络请求失败，请检查网络连接。' : error.message : null;
+      const modelMessage = service === 'model' && ['deepseek', 'deepseek-harness', 'mimo-api', 'mimo-token-plan-cn'].includes(config.ai.backend) ? error instanceof TypeError ? (config.ai.backend.startsWith('mimo-') ? 'MiMo API 网络请求失败，请检查连接。' : 'DeepSeek 网络请求失败，请检查网络连接。') : error.message : null;
       return this.checks[service] = { ok: false, message: native ? 'ChatGPT 插件读取失败，请确认本机 Codex 使用同一账号且插件已连接。' : modelMessage || messages[service] || '连接失败。', checkedAt: new Date().toISOString() };
     }
   }

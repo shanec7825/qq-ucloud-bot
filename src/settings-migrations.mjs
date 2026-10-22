@@ -1,12 +1,14 @@
-import { DEEPSEEK_DEFAULTS } from './ai-providers.mjs';
+import { DEEPSEEK_DEFAULTS, MIMO_AI_DEFAULTS } from './ai-providers.mjs';
 import { SPEECH_DEFAULTS } from '../napcat-plugin/speech-config.mjs';
 // Pure migrations keep saved settings and caller-owned objects unchanged.
 export function migrateSettings(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const next = structuredClone(value);
   next.speech ??= { ...SPEECH_DEFAULTS };
-  if (next.speech && typeof next.speech === 'object' && !Array.isArray(next.speech)) next.speech = { autoStyle: SPEECH_DEFAULTS.autoStyle, voiceDescription: SPEECH_DEFAULTS.voiceDescription, ...next.speech };
-  if (next.ai && typeof next.ai === 'object' && !Array.isArray(next.ai)) next.ai = { ...DEEPSEEK_DEFAULTS, ...next.ai };
+  if (next.speech && typeof next.speech === 'object' && !Array.isArray(next.speech)) {
+    next.speech = { autoStyle: SPEECH_DEFAULTS.autoStyle, voiceDescription: SPEECH_DEFAULTS.voiceDescription, ...next.speech };
+  }
+  if (next.ai && typeof next.ai === 'object' && !Array.isArray(next.ai)) next.ai = { ...MIMO_AI_DEFAULTS, ...DEEPSEEK_DEFAULTS, ...next.ai };
   if (next.version === 1) {
     next.version = 2;
     next.profiles ??= [];

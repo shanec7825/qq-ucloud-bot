@@ -42,45 +42,64 @@ export async function mediaReply(raw, event, deps, available, wantsVoice, { plan
   let decoded;
   try { decoded = JSON.parse(raw); } catch { /* Plain text is still supported. */ }
   if (decoded && Object.hasOwn(decoded, 'messages')) return multiReply(decoded, event, deps, available, wantsVoice);
-  let text = raw.slice(0, 6000), ids = [], style = '';
-  try {
-    const plan = JSON.parse(raw);
+  let text = raw.slice(0, 6000), ids = [], accepted;
+  {
+    const plan = decoded;
     if (plan && typeof plan.text === 'string' && (wantsVoice || Object.hasOwn(plan, 'mediaIds') || Object.hasOwn(plan, 'speech'))) {
       text = plan.text.slice(0, 6000);
       if (Object.keys(plan).every(key => ['text','mediaIds','speech'].includes(key)) && (plan.mediaIds === undefined || Array.isArray(plan.mediaIds))) {
         ids = [...new Set(plan.mediaIds || [])].slice(0, 2);
         if (ids.some(id => typeof id !== 'string' || !available.some(item => item.id === id))) { ids = []; if (!text) text = '没有找到当前会话可用的图片或表情包。'; }
-        if (deps.speech?.autoStyle && plan.speech && Object.keys(plan.speech).join() === 'style') {
-          try { style = speechStyle(plan.speech.style); } catch { /* Invalid guidance falls back to fixed voice settings. */ }
-        }
+        accepted = plan;
       }
     }
-  } catch { /* Plain text remains the normal reply format. */ }
+  }
+  const voice = plannedSpeech(accepted?.speech, text, deps.speech, wantsVoice);
+  let style = voice.style, spoken = false;
   const parts = [];
   for (const id of ids) parts.push(await deps.outgoingMedia.outgoing(event, id));
   let warning = '';
-  if (wantsVoice && text) {
+  if (voice.text) {
     if (planStyle && deps.speech.autoStyle && deps.speech.plan) {
-      try { style = speechStyle(await deps.speech.plan(text, event)); }
+      try { style = speechStyle(await deps.speech.plan(voice.text, event)); }
       catch { warning = '\n（本次自动语气分析未完成，使用固定声音设置朗读。）'; }
     }
-    try { parts.push(await deps.speech.synthesize(text, event, { style })); }
-    catch (error) { warning = '\n（语音未生成：' + error.message + '）'; }
+    try { parts.push(await deps.speech.synthesize(voice.text, event, { style })); spoken = true; }
+    catch (error) { warning = speechFailure(error.message, voice.text, text); }
   }
   if (!parts.length) return text + warning;
-  return { text: text + warning, segments: parts, summary: text + ids.map(id => `[图片：${available.find(item => item.id === id).name}]`).join('') };
+  return { text: text + warning, segments: parts, summary: text + warning + ids.map(id => `[图片：${available.find(item => item.id === id).name}]`).join('') + (spoken ? speechSummary(voice.text, text) : '') };
 }
+
+function plannedSpeech(speech, fallback, config, enabled) {
+  let text = enabled ? fallback : '', style = '';
+  if (!enabled || !speech || typeof speech !== 'object' || Array.isArray(speech) || Object.keys(speech).some(key => !['text', 'style'].includes(key))) return { text, style };
+  if (Object.hasOwn(speech, 'text')) {
+    const limit = config?.maxChars ?? 500;
+    if (typeof speech.text !== 'string' || speech.text.length > limit || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(speech.text)) throw new Error(`语音内容须为 ${limit} 字以内的文字，留空表示仅发文字。`);
+    text = speech.text.trim();
+  }
+  if (config?.autoStyle && Object.hasOwn(speech, 'style')) {
+    try { style = speechStyle(speech.style); } catch { /* Invalid optional guidance keeps the fixed voice settings. */ }
+  }
+  return { text, style };
+}
+
+function speechSummary(spoken, text) { return spoken.trim() !== text.trim() ? (text ? '\n' : '') + '[语音] ' + spoken : ''; }
+function speechFailure(error, spoken, text) { return '\n（语音未生成：' + error + '）' + (spoken.trim() !== text.trim() ? '\n语音内容：' + spoken : ''); }
 
 async function multiReply(plan, event, deps, available, wantsVoice) {
   if (Object.keys(plan).join() !== 'messages' || !Array.isArray(plan.messages) || !plan.messages.length || plan.messages.length > MAX_REPLY_MESSAGES) throw new Error('模型分条回复格式无效，未发送；每次最多 4 条。');
-  const selected = new Set();
+  const selected = new Set(), voices = [];
   for (const row of plan.messages) {
     if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).some(key => !['text','mediaIds','speech'].includes(key)) || typeof row.text !== 'string' || row.text.length > MAX_REPLY_TEXT || row.mediaIds !== undefined && !Array.isArray(row.mediaIds)) throw new Error('模型分条回复内容无效，未发送。');
     for (const id of row.mediaIds || []) {
       if (typeof id !== 'string' || !available.some(item => item.id === id) || selected.has(id)) throw new Error('模型选择了不可用或重复的素材，未发送。');
       selected.add(id);
     }
-    if (!row.text.trim() && !(row.mediaIds || []).length) throw new Error('模型返回了空消息，未发送。');
+    const voice = plannedSpeech(row.speech, row.text, deps.speech, wantsVoice);
+    voices.push(voice);
+    if (!row.text.trim() && !(row.mediaIds || []).length && !voice.text) throw new Error('模型返回了空消息，未发送。');
   }
   if (selected.size > 2) throw new Error('单次回复最多使用两张图片或表情包，未发送。');
   const messages = [];
@@ -89,14 +108,8 @@ async function multiReply(plan, event, deps, available, wantsVoice) {
     messages.push(typeof result === 'string' ? { text: result, segments: [], summary: result } : result);
   }
   if (wantsVoice && deps.speech) {
-    const indices = messages.map((row, index) => row.text.trim() ? index : -1).filter(index => index >= 0);
-    const requests = indices.map(index => {
-      let style = '';
-      if (deps.speech.autoStyle && plan.messages[index].speech && Object.keys(plan.messages[index].speech).join() === 'style') {
-        try { style = speechStyle(plan.messages[index].speech.style); } catch { /* Keep the fixed voice on invalid optional guidance. */ }
-      }
-      return { text: messages[index].text, style };
-    });
+    const indices = voices.map((voice, index) => voice.text ? index : -1).filter(index => index >= 0);
+    const requests = indices.map(index => voices[index]);
     if (requests.length) {
       let results;
       try {
@@ -105,8 +118,8 @@ async function multiReply(plan, event, deps, available, wantsVoice) {
       } catch (error) { results = requests.map(() => ({ error: error.message })); }
       for (const [position, index] of indices.entries()) {
         const result = results[position];
-        if (result?.part) messages[index].segments.push(result.part);
-        else { const note = '\n（语音未生成：' + (result?.error || '服务未返回音频') + '）'; messages[index].text += note; messages[index].summary += note; }
+        if (result?.part) { messages[index].segments.push(result.part); messages[index].summary += speechSummary(voices[index].text, messages[index].text); }
+        else { const note = speechFailure(result?.error || '服务未返回音频', voices[index].text, messages[index].text); messages[index].text += note; messages[index].summary += note; }
       }
     }
   }
