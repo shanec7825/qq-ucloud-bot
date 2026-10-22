@@ -16,8 +16,8 @@ using Microsoft.Web.WebView2.WinForms;
 
 [assembly: AssemblyTitle("QQ Agent")]
 [assembly: AssemblyDescription("QQ Agent Windows desktop launcher")]
-[assembly: AssemblyVersion("2.1.0.0")]
-[assembly: AssemblyFileVersion("2.1.0.0")]
+[assembly: AssemblyVersion("2.2.0.0")]
+[assembly: AssemblyFileVersion("2.2.0.0")]
 
 namespace QQAgentDesktop {
     internal static class Program {
@@ -68,6 +68,7 @@ namespace QQAgentDesktop {
             menu.Items.Add("机器人设置", null, async delegate { RestoreWindow(); await RunSafely(delegate { return OpenPage("/webui/plugins"); }); });
             menu.Items.Add("扩展设置页", null, async delegate { RestoreWindow(); await RunSafely(delegate { return OpenPage("/webui/extension"); }); });
             var management = new ToolStripMenuItem("运行管理"); menu.Items.Add(management);
+            AddAction(management.DropDownItems, "一键准备并启动", delegate { return SetupAll(); });
             AddAction(management.DropDownItems, "启动机器人", delegate { return Operate("start"); });
             AddAction(management.DropDownItems, "停止机器人", delegate { return Operate("stop-bot"); });
             AddAction(management.DropDownItems, "切换 QQ 账号", SwitchAccount);
@@ -112,6 +113,8 @@ namespace QQAgentDesktop {
                 SaveWorkspace();
                 environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Program.AppData, smoke ? "WebView2-smoke" : "WebView2"));
                 await browser.EnsureCoreWebView2Async(environment);
+                // NapCat plugin assets keep fixed URLs and can remain cached for 24 hours across upgrades.
+                await browser.CoreWebView2.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
                 browser.CoreWebView2.Settings.AreHostObjectsAllowed = false; browser.CoreWebView2.Settings.IsWebMessageEnabled = true;
                 browser.CoreWebView2.SetVirtualHostNameToFolderMapping("qq-agent.local", Path.Combine(Program.InstallDirectory, "assets"), CoreWebView2HostResourceAccessKind.DenyCors);
                 browser.CoreWebView2.NavigationStarting += delegate(object sender, CoreWebView2NavigationStartingEventArgs e) {
@@ -124,7 +127,8 @@ namespace QQAgentDesktop {
                     string action; try { action = e.TryGetWebMessageAsString(); } catch { return; }
                     await RunSafely(async delegate {
                         if (action == "login") await OpenPage("/webui/qq_login"); else if (action == "settings") await OpenPage("/webui/plugins"); else if (action == "workspace") await SelectWorkspace();
-                        else if (action == "switch") await SwitchAccount(); else if (action == "data") OpenFolder(Path.Combine(workspace, "data")); else if (action == "home") await NavigateHome(); else if (new[] { "start", "install", "stop-bot" }.Contains(action)) await Operate(action);
+                        else if (action == "switch") await SwitchAccount(); else if (action == "data") OpenFolder(Path.Combine(workspace, "data")); else if (action == "home") await NavigateHome();
+                        else if (action == "open-webui") await OpenPage("/webui/"); else if (action == "setup") await SetupAll(); else if (new[] { "start", "install", "stop-bot" }.Contains(action)) await Operate(action);
                     });
                 };
                 browser.CoreWebView2.NavigationCompleted += async delegate { if (home && browser.Source != null && browser.Source.Host == "qq-agent.local") await RefreshStatus(); };
@@ -181,7 +185,15 @@ namespace QQAgentDesktop {
             if (GetBool(status, "webuiAvailable")) { await OpenPageCore("/webui/", generation, folder); return; }
             home = true; progress.Visible = true; browser.CoreWebView2.Navigate(HomeURL);
         }
-        async Task Operate(string action) { progress.Text = action == "install" ? "准备组件中，首次下载可能需要几分钟…" : action == "stop-bot" ? "正在停止机器人…" : "正在启动并复用本机后台…"; await Service(action, action == "install" ? 600000 : 150000); await NavigateHome(); }
+        async Task Operate(string action, bool navigate = true) { progress.Text = action == "install" ? "准备组件中，首次下载可能需要几分钟…" : action == "stop-bot" ? "正在停止机器人…" : "正在启动并复用本机后台…"; await Service(action, action == "install" ? 600000 : 150000); if (navigate) await NavigateHome(); }
+        async Task SetupAll() {
+            Exception failure = null;
+            try { await Operate("install", false); await Operate("start", false); }
+            catch (Exception error) { failure = error; }
+            await SendProgressDone("setup", failure == null, failure == null ? null : failure.Message);
+            if (failure != null) throw failure;
+            await NavigateHome();
+        }
         async Task OpenPage(string path) {
             await OpenPageCore(path, ++navigationGeneration, workspace);
         }
@@ -229,17 +241,43 @@ namespace QQAgentDesktop {
             result.Append('\\', slashes * 2); return result.Append('"').ToString();
         }
         async Task<Dictionary<string, object>> Service(string action, int timeout) {
-            string node = Path.Combine(Program.InstallDirectory, "runtime", "node.exe"), script = Path.Combine(workspace, "scripts", "desktop-service.mjs");
-            if (!File.Exists(node) || !File.Exists(script)) throw new Exception("运行文件不完整，请重新安装 QQ Agent，或选择已更新的项目。");
-            using (var process = new Process { StartInfo = new ProcessStartInfo(node, Quote(script) + " " + Quote(action) + " " + Quote(workspace)) { WorkingDirectory = workspace, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 } }) {
-                process.Start(); var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
-                bool exited = await Task.Run(delegate { return process.WaitForExit(timeout); });
-                if (!exited) { try { process.Kill(); } catch { } throw new Exception("操作等待超时；请先检查后台状态，避免重复启动。"); }
-                string output = await stdout; await stderr;
-                Dictionary<string, object> result; try { result = Program.Json.Deserialize<Dictionary<string, object>>(output.Trim()); } catch { throw new Exception("本机服务返回异常，请查看项目 data 目录日志。"); }
-                if (process.ExitCode != 0 || !GetBool(result, "ok")) throw new Exception(GetText(result, "error")); return result;
-            }
+            Exception failure = null; Dictionary<string, object> result = null;
+            try {
+                string node = Path.Combine(Program.InstallDirectory, "runtime", "node.exe"), script = Path.Combine(workspace, "scripts", "desktop-service.mjs");
+                if (!File.Exists(node) || !File.Exists(script)) throw new Exception("运行文件不完整，请重新安装 QQ Agent，或选择已更新的项目。");
+                using (var process = new Process { StartInfo = new ProcessStartInfo(node, Quote(script) + " " + Quote(action) + " " + Quote(workspace)) { WorkingDirectory = workspace, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 } }) {
+                    process.Start(); var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = PumpProgress(process);
+                    bool exited = await Task.Run(delegate { return process.WaitForExit(timeout); });
+                    if (!exited) { try { process.Kill(); } catch { } throw new Exception("操作等待超时；请先检查后台状态，避免重复启动。"); }
+                    string output = await stdout; await stderr;
+                    Dictionary<string, object> parsed; try { parsed = Program.Json.Deserialize<Dictionary<string, object>>(output.Trim()); } catch { throw new Exception("本机服务返回异常，请查看项目 data 目录日志。"); }
+                    if (process.ExitCode != 0 || !GetBool(parsed, "ok")) throw new Exception(GetText(parsed, "error"));
+                    result = parsed;
+                }
+            } catch (Exception error) { failure = error; }
+            await SendProgressDone(action, failure == null, failure == null ? null : failure.Message);
+            if (failure != null) throw failure;
+            return result;
         }
+        async Task PumpProgress(Process process) {
+            try {
+                while (true) {
+                    string line = await process.StandardError.ReadLineAsync();
+                    if (line == null) break;
+                    if (!line.StartsWith("PROGRESS ", StringComparison.Ordinal)) continue;
+                    Dictionary<string, object> payload = null;
+                    try { payload = Program.Json.Deserialize<Dictionary<string, object>>(line.Substring("PROGRESS ".Length).Trim()); } catch { }
+                    if (payload != null) await RenderProgress(payload);
+                }
+            } catch { }
+        }
+        async Task RenderProgress(Dictionary<string, object> payload) { await RunPageScript("window.renderProgress&&window.renderProgress(" + Program.Json.Serialize(payload) + ")"); }
+        async Task SendProgressDone(string action, bool ok, string error) {
+            var payload = new Dictionary<string, object>(); payload["action"] = action; payload["done"] = true; payload["ok"] = ok;
+            if (!ok) payload["error"] = error == null ? "" : error;
+            await RenderProgress(payload);
+        }
+        async Task RunPageScript(string script) { try { if (home && browser.CoreWebView2 != null) await browser.CoreWebView2.ExecuteScriptAsync(script); } catch { } }
         async void PopupRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e) {
             e.Handled = true;
             if (e.Uri != "about:blank") { if (e.Uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) OpenExternal(e.Uri); return; }
@@ -258,13 +296,25 @@ namespace QQAgentDesktop {
             if (!ready) throw new Exception("内嵌插件管理未能加载。");
             string output = Program.Argument(arguments, "--output") ?? Path.Combine(workspace, "data", "desktop-smoke"); Directory.CreateDirectory(output);
             using (var stream = File.Create(Path.Combine(output, "plugins.png"))) await browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+            await OpenPage("/webui/extension"); ready = false;
+            for (int i = 0; i < 100; i++) {
+                string value = await browser.CoreWebView2.ExecuteScriptAsync("!!Array.from(document.querySelectorAll('iframe')).some(f=>{try{return !!f.contentDocument.querySelector('main.settings-main form [data-save]')}catch(e){return false}})");
+                if (value == "true") { ready = true; break; } await Task.Delay(150);
+            }
+            if (!ready) throw new Exception("扩展工作台未加载最新页面，可能仍在使用旧资源缓存。");
+            int navigations = 0;
+            EventHandler<CoreWebView2NavigationStartingEventArgs> watchNavigation = delegate { navigations++; };
+            browser.CoreWebView2.NavigationStarting += watchNavigation;
+            try { await Task.Delay(13000); } finally { browser.CoreWebView2.NavigationStarting -= watchNavigation; }
+            if (navigations != 0) throw new Exception("扩展页面重复跳转。");
+            using (var stream = File.Create(Path.Combine(output, "extension.png"))) await browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
             await OpenPage("/webui/qq_login"); await Task.Delay(1500);
             HideToTray(); if (Visible || !tray.Visible) throw new Exception("托盘收起失败。"); RestoreWindow(); if (!Visible) throw new Exception("托盘恢复失败。");
             await NavigateHome(); await Task.Delay(300); await RefreshStatus();
             string shown = await browser.CoreWebView2.ExecuteScriptAsync("location.origin==='http://127.0.0.1:6099'&&location.pathname.startsWith('/webui/')");
             if (shown != "true") throw new Exception("首页未打开 NapCat 原版 WebUI。");
             using (var stream = File.Create(Path.Combine(output, "home.png"))) await browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
-            WriteSmoke(true, "Native WebView2, authenticated plugin page, QQ login navigation and tray restore verified. No account switch, QQ message or model request."); quitting = true; Close();
+            WriteSmoke(true, "Native WebView2, current extension UI, 13-second navigation stability, authenticated plugin page, QQ login navigation and tray restore verified. No account switch, QQ message or model request."); quitting = true; Close();
         }
         void WriteSmoke(bool passed, string message) {
             string output = Program.Argument(arguments, "--output") ?? Path.Combine(workspace, "data", "desktop-smoke"); Directory.CreateDirectory(output);

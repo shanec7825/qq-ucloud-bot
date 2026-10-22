@@ -27,6 +27,11 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
   page.on('dialog', dialog => dialog.accept());
+  // The admin server now redirects "/" to the NapCat WebUI and serves no static files; feed the real web/ frontend over the real admin API (same pattern as the embedded modules below).
+  const staticHtml = await readFile(new URL('../web/index.html', import.meta.url), 'utf8');
+  await page.route(url => url.origin === admin.origin && url.pathname === '/', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: staticHtml }));
+  await page.route('**/app.js', async route => route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL('../web/app.js', import.meta.url), 'utf8') }));
+  await page.route('**/style.css', async route => route.fulfill({ contentType: 'text/css', body: await readFile(new URL('../web/style.css', import.meta.url), 'utf8') }));
   await page.goto(admin.origin + '/#key=' + admin.accessKey);
   await page.locator('#shell').waitFor({ state: 'visible' });
   assert.deepEqual(await page.evaluate(() => { const ids = [...document.querySelectorAll('[id]')].map(node => node.id); return ids.filter((id, index) => ids.indexOf(id) !== index); }), []);
@@ -102,6 +107,50 @@ try {
     }
     await embedded.close();
   }
-  const home = await context.newPage(); home.on('pageerror', error => errors.push(error.message)); await home.addInitScript(() => { window.chrome = { webview: { postMessage: value => window.lastAction = value } }; }); await home.goto(pathToFileURL(join(process.cwd(), 'desktop/assets/home.html')).href); await home.evaluate(() => window.renderStatus({ qqLoggedIn: true, botConnected: true, model: 'fixture-model', workspace: 'D:\\fixture' })); for (const width of [375, 1440]) for (const colorScheme of ['light', 'dark']) { await home.setViewportSize({ width, height: 1000 }); await home.emulateMedia({ colorScheme }); assert.equal(await home.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); assert.ok(await home.locator('.actions button').first().evaluate(node => node.getBoundingClientRect().height < 80)); await home.screenshot({ path: 'data/workspace-desktop-home-' + width + '-' + colorScheme + '.png', fullPage: true }); } await home.setViewportSize({ width: 1440, height: 1000 }); await home.emulateMedia({ colorScheme: 'light' }); await home.evaluate(() => window.scrollTo(0, 0)); await home.screenshot({ path: 'data/desktop-home.png' }); await home.close();
+  const home = await context.newPage(); home.on('pageerror', error => errors.push(error.message)); await home.addInitScript(() => { window.chrome = { webview: { postMessage: value => window.lastAction = value } }; }); await home.goto(pathToFileURL(join(process.cwd(), 'desktop/assets/home.html')).href); await home.evaluate(() => window.renderStatus({ qqLoggedIn: true, botConnected: true, model: 'fixture-model', workspace: 'D:\\fixture' })); for (const width of [375, 1440]) for (const colorScheme of ['light', 'dark']) { await home.setViewportSize({ width, height: 1000 }); await home.emulateMedia({ colorScheme }); assert.equal(await home.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true); assert.ok(await home.locator('.actions button').first().evaluate(node => node.getBoundingClientRect().height < 80)); await home.screenshot({ path: 'data/workspace-desktop-home-' + width + '-' + colorScheme + '.png', fullPage: true }); } await home.setViewportSize({ width: 1440, height: 1000 }); await home.emulateMedia({ colorScheme: 'light' }); await home.evaluate(() => window.scrollTo(0, 0)); await home.screenshot({ path: 'data/desktop-home.png' });
+  // Protocol v1 coverage for the setup wizard: rich status, graceful old-field subsets, progress busy state, done semantics.
+  await home.evaluate(() => window.renderStatus({
+    version: '2.1.0', workspace: 'D:\\Users\\Lenovo\\bupt-qq-homework-bot', qqLoggedIn: false, webuiAvailable: false, botConnected: false, botName: '作业助手', model: '', loginPhase: 'waiting-scan',
+    system: [
+      { id: 'os', label: 'Windows 11', ok: true, detail: 'Windows 11 23H2' },
+      { id: 'dotnet', ok: true, detail: '.NET Desktop Runtime 8.0' },
+      { id: 'webview2', ok: false, detail: '未安装 WebView2 运行时', help: '请先安装官方运行时再启动。' },
+      { id: 'node', ok: true, detail: 'Node.js v24.0.0' },
+      { id: 'powershell', ok: true, detail: 'PowerShell 7.4' },
+    ],
+    components: [
+      { id: 'napcat', ok: true, version: 'NapCat 4.x', detail: '已安装' },
+      { id: 'codex', ok: false, version: '', detail: '未安装', optional: true },
+    ],
+  }));
+  await home.locator('.check-row').first().waitFor();
+  assert.equal(await home.locator('.check-row').count(), 7, 'system 5 rows + components 2 rows');
+  assert.equal(await home.locator('a[href="https://developer.microsoft.com/microsoft-edge/webview2/"]').count(), 1, 'webview2 failure links the official download');
+  await home.screenshot({ path: 'data/desktop-home-status.png', fullPage: true });
+  // Old-field subsets still render gracefully as 未知/未检测 without errors.
+  await home.evaluate(() => window.renderStatus({ qqLoggedIn: true, botConnected: true, model: 'fixture-model', workspace: 'D:\\fixture' }));
+  await home.waitForFunction(() => document.querySelectorAll('.check-state.unknown').length >= 5);
+  // renderProgress: non-done disables every action button and shows the progress bar; done restores them.
+  await home.evaluate(() => window.renderProgress({ action: 'install', step: 2, item: 'napcat', message: '正在下载运行组件…', percent: 42 }));
+  await home.waitForFunction(() => [...document.querySelectorAll('.actions button')].every(button => button.disabled));
+  assert.equal(await home.locator('[role=progressbar]').isVisible(), true);
+  assert.equal(await home.locator('[role=progressbar]').getAttribute('aria-valuenow'), '42');
+  await home.evaluate(() => window.renderProgress({ action: 'install', step: 2, message: '组件已就绪', percent: 100, done: true, ok: true }));
+  await home.waitForFunction(() => [...document.querySelectorAll('.actions button')].every(button => !button.disabled));
+  // Errors surface as red feedback in the matching section.
+  await home.evaluate(() => window.renderProgress({ action: 'start', step: 1, message: '启动失败', done: true, ok: false, error: 'fixture 启动错误' }));
+  await home.locator('.feedback.error').filter({ hasText: 'fixture 启动错误' }).waitFor();
+  await home.evaluate(() => window.renderStatus({}));
+  // A setup run stays busy through the install/start done events and clears on its own closing done event.
+  await home.getByRole('button', { name: '一键准备并启动' }).click();
+  assert.equal(await home.evaluate(() => window.lastAction), 'setup');
+  await home.evaluate(() => window.renderProgress({ action: 'install', message: '组件已就绪', done: true, ok: true }));
+  await home.evaluate(() => window.renderProgress({ action: 'start', step: 1, message: '正在启动…' }));
+  await home.evaluate(() => window.renderProgress({ action: 'setup', message: '已启动', done: true, ok: true }));
+  await home.waitForFunction(() => [...document.querySelectorAll('.actions button')].every(button => !button.disabled));
+  // 12s status poll completions never disturb the wizard.
+  await home.evaluate(() => window.renderProgress({ action: 'status', done: true, ok: true }));
+  assert.equal(await home.evaluate(() => [...document.querySelectorAll('.actions button')].every(button => !button.disabled)), true);
+  await home.close();
   assert.deepEqual(errors, []); console.log('Workspace browser checks passed: profiles/bind/guard/reload, metadata/scope/filter/drafts, inbox opaque IDs/status/source persistence, all 6 pages at 375/1440 light/dark and all 5 mocked NapCat modules. No QQ/model calls.');
 } finally { await browser?.close(); runtime?.stop(); await admin?.close(); await rm(folder, { recursive: true, force: true }); }

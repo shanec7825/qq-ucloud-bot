@@ -15,7 +15,15 @@ const png = canvas.toBuffer('image/png'), icon = Buffer.alloc(22); icon.writeUIn
 for (const name of ['Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll']) await copyFile(join(sdk, 'lib/net462', name), join(app, name));
 await copyFile(join(sdk, 'runtimes/win-x64/native/WebView2Loader.dll'), join(app, 'WebView2Loader.dll'));
 await copyFile(join(root, 'desktop/QQAgent.exe.config'), join(app, 'QQAgent.exe.config'));
-await copyFile(join(root, 'desktop/assets/home.html'), join(app, 'assets/home.html'));
+async function copyAssets(folder, prefix) {
+  for (const entry of await readdir(folder, { withFileTypes: true })) {
+    const source = join(folder, entry.name), relative = prefix + entry.name;
+    if (entry.isSymbolicLink()) throw new Error('启动页资源不允许链接：' + relative);
+    if (entry.isDirectory()) { await mkdir(join(app, 'assets', relative), { recursive: true }); await copyAssets(source, relative + '/'); }
+    else if (entry.isFile()) await copyFile(source, join(app, 'assets', relative));
+  }
+}
+await copyAssets(join(root, 'desktop/assets'), ''); await access(join(app, 'assets/home.html'));
 const nodeFolder = join(root, 'tools/desktop/node/node-' + versions.node + '-win-x64');
 await copyFile(join(nodeFolder, 'node.exe'), join(app, 'runtime/node.exe')); await copyFile(join(nodeFolder, 'LICENSE'), join(app, 'runtime/LICENSE-Node.txt'));
 for (const name of ['README.md', 'README.Windows.md', 'THIRD_PARTY.md', 'LICENSE']) await copyFile(join(root, name), join(app, name));

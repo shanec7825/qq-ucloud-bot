@@ -1,5 +1,5 @@
 import { heroui } from '@heroui/theme';
 export default {
-  content:['./src/**/*.{js,jsx}', './node_modules/@heroui/theme/dist/**/*.{js,mjs}'],
+  content:['./src/**/*.{js,jsx}', '../shared/**/*.{js,jsx}', '../desktop/**/*.{js,jsx}', './node_modules/@heroui/theme/dist/**/*.{js,mjs}'],
   darkMode:'class', plugins:[heroui()],
 };

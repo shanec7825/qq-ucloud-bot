@@ -1,0 +1,37 @@
+/* Desktop setup wizard. Shared tokens and components come from ui/shared/theme.css (composed by ui/napcat/build.mjs). */
+html,body,#root{min-height:100%}
+body{margin:0;background:hsl(var(--heroui-background));color:hsl(var(--heroui-foreground));font:14px/1.6 "Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+
+.wizard{display:flex;flex-direction:column;gap:18px;max-width:1080px;margin-inline:auto;padding:22px 24px 28px}
+
+/* Top bar: name, version badge and a workspace path that may wrap without breaking the layout. */
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-width:0;padding:14px 18px;border:1px solid var(--qa-line);border-radius:16px;background:var(--qa-surface);box-shadow:0 1px 3px hsl(var(--heroui-foreground)/.05)}
+.brand-mark{display:grid;place-items:center;width:36px;height:36px;flex-shrink:0;border-radius:10px;background:hsl(var(--heroui-primary)/.1);color:var(--qa-accent)}
+.brand-name{margin:0;font-size:18px;line-height:1.5;font-weight:600;white-space:nowrap}
+.version-badge{flex-shrink:0;font-size:11px;line-height:1.7;padding:1px 8px;border-radius:999px;border:1px solid var(--qa-line);background:hsl(var(--heroui-default-100));color:var(--qa-muted);font-variant-numeric:tabular-nums}
+.topbar-workspace{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;flex:1 1 260px;min-width:0}
+.topbar-label{flex-shrink:0;font-size:12px;color:var(--qa-muted)}
+.workspace-path{min-width:0;font-size:12px;color:var(--qa-muted);overflow-wrap:anywhere}
+.topbar .action-button{margin-left:auto}
+
+/* Status summary capsules. */
+.summary{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+
+/* Two-column wizard grid on wide windows, a single column on narrow ones. */
+.wizard-main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;min-width:0}
+.path-value{margin:0;font-size:13px;line-height:1.7;color:var(--qa-muted);overflow-wrap:anywhere}
+.footnote{font-size:12px;line-height:1.8;color:var(--qa-muted);padding:2px 4px 0;overflow-wrap:anywhere}
+
+@media(max-width:860px){
+  .wizard{padding:16px 16px 22px;gap:14px}
+  .wizard-main{grid-template-columns:1fr;gap:14px}
+  .setup-card{padding:18px 16px}
+  .topbar .action-button{margin-left:0}
+}
+@media(max-width:420px){
+  .wizard{padding:12px 12px 18px}
+  .brand-name{font-size:17px}
+  .setup-card{padding:16px 14px;border-radius:14px}
+  .action-button{padding:0 12px}
+}

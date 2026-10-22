@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { validateWorkspace, validateWorkspacePath, mergeOneBot, quickLoginConfig, DesktopService } from '../src/desktop-service.mjs';
 import { PLUGIN_MODULES } from '../napcat-plugin/catalog.mjs';
 
@@ -85,5 +86,111 @@ test('桌面刷新跨进程实例复用加密会话，失效后重新认证，�
     for (let i = 0; i < 15; i++) assert.equal(await new DesktopService(root, { ownerReader: async () => [], fetcher, sessionCodec }).session(), 'PRIVATE_SESSION');
     assert.equal(logins, 1); revoked = true;
     assert.equal(await new DesktopService(root, { ownerReader: async () => [], fetcher, sessionCodec }).session(), 'PRIVATE_SESSION'); assert.equal(logins, 2);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('status() 的 system/components 字段形状与顺序固定，不影响现有字段', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'qq-agent-shape-'));
+  try {
+    await mkdir(join(root, 'desktop'), { recursive: true });
+    await writeFile(join(root, 'desktop/versions.json'), JSON.stringify({ napcat: 'v4.18.38', napcatAsset: 'NapCat.Shell.Windows.Node.zip', codexURL: 'https://example.invalid/openai/codex/releases/download/rust-v0.163.0/codex-x86_64-pc-windows-msvc.exe.zip' }));
+    await mkdir(join(root, 'tools/napcat'), { recursive: true }); await writeFile(join(root, 'tools/napcat/node.exe'), 'stub');
+    const service = new DesktopService(root, { ownerReader: async () => [], systemReader: async () => ['os', 'dotnet', 'webview2', 'node', 'powershell'].map(id => ({ id, ok: true, detail: id + ' 明细' })) });
+    const state = await service.status();
+    assert.deepEqual(state.system.map(item => item.id), ['os', 'dotnet', 'webview2', 'node', 'powershell']);
+    for (const item of state.system) {
+      assert.deepEqual(Object.keys(item), ['id', 'label', 'ok', 'detail']);
+      assert.equal(item.ok, true); assert.ok(item.label); assert.equal(item.detail, item.id + ' 明细');
+    }
+    assert.deepEqual(state.components.map(item => item.id), ['napcat', 'codex']);
+    const [napcat, codex] = state.components;
+    assert.deepEqual(Object.keys(napcat), ['id', 'label', 'ok', 'version', 'detail']);
+    assert.deepEqual(Object.keys(codex), ['id', 'label', 'ok', 'version', 'detail', 'optional']);
+    assert.equal(napcat.ok, true); assert.equal(napcat.version, 'v4.18.38');
+    assert.equal(codex.ok, false); assert.equal(codex.version, 'rust-v0.163.0'); assert.equal(codex.optional, true);
+    for (const key of ['workspace', 'napcatInstalled', 'webuiAvailable', 'qqLoggedIn', 'botConnected']) assert.ok(key in state);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('status() 的系统检查可注入：systemReader 生效，缺失项与异常都按失败返回且不外抛', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'qq-agent-system-'));
+  try {
+    const service = new DesktopService(root, {
+      ownerReader: async () => [],
+      systemReader: async () => [
+        { id: 'powershell', ok: true, detail: '注入的 PowerShell 5.1' },
+        { id: 'os', ok: false, detail: '注入的系统信息' },
+        { id: 'webview2', ok: false, detail: '注入的 WebView2 缺失' },
+      ],
+    });
+    const state = await service.status(), byId = Object.fromEntries(state.system.map(item => [item.id, item]));
+    assert.deepEqual(state.system.map(item => item.id), ['os', 'dotnet', 'webview2', 'node', 'powershell']);
+    assert.equal(byId.os.ok, false); assert.equal(byId.os.detail, '注入的系统信息'); assert.equal(byId.os.help, undefined);
+    assert.equal(byId.powershell.ok, true); assert.equal(byId.powershell.detail, '注入的 PowerShell 5.1');
+    assert.equal(byId.webview2.help, 'https://developer.microsoft.com/microsoft-edge/webview2/');
+    assert.equal(byId.dotnet.ok, false); assert.equal(byId.dotnet.detail, '未检测到。');
+    const broken = new DesktopService(root, { ownerReader: async () => [], systemReader: async () => { throw new Error('boom'); } });
+    const failed = await broken.status();
+    assert.equal(failed.system.length, 5); assert.ok(failed.system.every(item => item.ok === false && item.detail.includes('boom')));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('install() 全程按协议上报 progress：download/extract/configure 与收尾 done:true ok:true', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'qq-agent-install-')), events = [], extracted = [];
+  const encode = text => new TextEncoder().encode(text), digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const napcatBytes = encode('NAPCAT_FIXTURE'), codexBytes = encode('CODEX_FIXTURE');
+  const previousCodexBin = process.env.CODEX_BIN; delete process.env.CODEX_BIN;
+  try {
+    await mkdir(join(root, 'desktop'), { recursive: true });
+    await writeFile(join(root, 'desktop/versions.json'), JSON.stringify({ napcat: 'v9.9.9', napcatAsset: 'NapCat.Shell.Windows.Node.zip', napcatSha256: digest(napcatBytes), codexURL: 'https://example.invalid/openai/codex/releases/download/rust-v0.1.0/codex.zip', codexSha256: digest(codexBytes) }));
+    const service = new DesktopService(root, {
+      ownerReader: async () => [],
+      fetcher: async url => ({ ok: true, status: 200, arrayBuffer: async () => { const bytes = url.includes('codex') ? codexBytes : napcatBytes; return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); } }),
+      extractor: async (archive, target) => {
+        extracted.push([archive, target]); await mkdir(target, { recursive: true });
+        await writeFile(join(target, target.endsWith('napcat') ? 'node.exe' : 'codex-x86_64-pc-windows-msvc.exe'), 'stub');
+      },
+      progress: payload => events.push(payload),
+    });
+    service.configure = async () => {};
+    assert.deepEqual(await service.install(), { installed: true });
+    assert.deepEqual(events.map(event => event.step).filter(Boolean), ['download', 'extract', 'download', 'extract', 'configure']);
+    assert.deepEqual(events.filter(event => !event.done).map(event => event.item), ['napcat', 'napcat', 'codex', 'codex', undefined]);
+    assert.deepEqual(events.at(-1), { action: 'install', done: true, ok: true });
+    assert.deepEqual(events.filter(event => event.done), [events.at(-1)]);
+    for (const event of events) {
+      assert.equal(event.action, 'install');
+      if (event.done) continue;
+      assert.match(event.step, /^[a-z]+$/); assert.match(event.message, /[\u4e00-\u9fff]/);
+      assert.ok(Number.isInteger(event.percent) && event.percent >= 0 && event.percent <= 100);
+    }
+    assert.equal(extracted.length, 2);
+  } finally {
+    if (previousCodexBin === undefined) delete process.env.CODEX_BIN; else process.env.CODEX_BIN = previousCodexBin;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('install()/start() 失败路径发出 done:true ok:false error，收尾事件只发一次', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'qq-agent-fail-')), events = [];
+  try {
+    await mkdir(join(root, 'desktop'), { recursive: true });
+    await writeFile(join(root, 'desktop/versions.json'), JSON.stringify({ napcat: 'v9.9.9', napcatAsset: 'x.zip', napcatSha256: '0'.repeat(64), codexURL: 'https://example.invalid/codex.zip', codexSha256: '1'.repeat(64) }));
+    const service = new DesktopService(root, {
+      ownerReader: async () => [],
+      fetcher: async () => ({ ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode('BAD_BYTES').buffer }),
+      extractor: async () => { throw new Error('校验失败后不得解压'); },
+      progress: payload => events.push(payload),
+    });
+    await assert.rejects(() => service.install(), /校验失败/);
+    assert.deepEqual(events.map(event => event.step).filter(Boolean), ['download']);
+    const installDone = events.filter(event => event.done);
+    assert.equal(installDone.length, 1); assert.equal(installDone[0].action, 'install'); assert.equal(installDone[0].ok, false); assert.match(installDone[0].error, /校验失败/);
+    const starts = [];
+    const other = new DesktopService(join(tmpdir(), 'qq-agent-other-workspace'), { ownerReader: async () => [join(tmpdir(), 'qq-agent-old-workspace/tools/napcat/node.exe')], progress: payload => starts.push(payload) });
+    await assert.rejects(() => other.start(), { code: 'WORKSPACE_MISMATCH' });
+    const startDone = starts.filter(event => event.done);
+    assert.equal(startDone.length, 1); assert.equal(startDone[0].action, 'start'); assert.equal(startDone[0].ok, false); assert.match(startDone[0].error, /其他工作区/);
+    assert.equal(starts.at(-1), startDone[0]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Button } from '@heroui/button';
 import { Input } from '@heroui/input';
 import { PAGE_COPY } from '../../../napcat-plugin/webui/copy.mjs';
-import { Icon, searchStyle } from './controls.jsx';
+import { Icon } from '../../shared/Icon.jsx';
+import { StatusPill } from '../../shared/StatusPill.jsx';
+import { searchStyle } from './controls.jsx';
 
 export function PageNavigation({ field, value, busy, onChange }) {
   if (!field) return null;
@@ -59,6 +61,6 @@ export function FieldSections({ fields, page, sections, renderField }) {
 
 export function StatusText({ field }) {
   const links=String(field.default||'').match(/https:\/\/[^\s]+/g)||[];
-  if(field.key==='service_status'||field.appearance==='status')return <div className="status-line"><span className={'status-pill '+(field.tone||'default')}>{field.default}</span>{field.tone==='danger'&&field.message&&<p className="text-small text-danger mt-2">{field.message}</p>}</div>;
+  if(field.key==='service_status'||field.appearance==='status')return <div className="status-line"><StatusPill tone={field.tone||'default'}>{field.default}</StatusPill>{field.tone==='danger'&&field.message&&<p className="text-small text-danger mt-2">{field.message}</p>}</div>;
   return <div className="text-small whitespace-pre-wrap break-words text-default-600">{field.default}{links.map(url=><a className="block text-primary underline" key={url} href={url} target="_blank" rel="noopener noreferrer">打开授权页</a>)}</div>;
 }

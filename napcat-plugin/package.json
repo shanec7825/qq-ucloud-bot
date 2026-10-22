@@ -1,7 +1,7 @@
 {
   "name": "napcat-plugin-qq-agent",
   "plugin": "QQ Agent · 机器人核心",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "通用 QQ AI 机器人核心，昵称与插件名称分开配置。",
   "type": "module",
   "main": "index.mjs",

@@ -9,7 +9,9 @@ import { Spinner } from '@heroui/spinner';
 import { PAGE_COPY, FIELD_SECTIONS } from '../../../napcat-plugin/webui/copy.mjs';
 import { ContactPicker, SchoolReader, PersonaWorkspace } from './workspace.jsx';
 import { PageNavigation, RecordList, FieldSections, StatusText } from './panels.jsx';
-import { Icon, fieldStyle } from './controls.jsx';
+import { fieldStyle } from './controls.jsx';
+import { Icon } from '../../shared/Icon.jsx';
+import { Feedback } from '../../shared/Feedback.jsx';
 import { MediaWorkspace, SpeechPreview } from './media.jsx';
 
 const pluginId = location.pathname.split('/')[2];
@@ -159,7 +161,7 @@ function App() {
       onValueChange={v=>change(field,field.type==='number'?Number(v):v)}/>;
   };
   const navigation=<PageNavigation field={pageField} value={page} busy={busy} onChange={value=>change(pageField,value)}/>;
-  const feedback=<p id="feedback" role="status" aria-live="polite" className={'feedback '+(error?'error':'success')}>{message}</p>;
+  const feedback=<Feedback id="feedback" tone={error?'error':'success'} message={message}/>;
   if(!form)return <main className="settings-main" aria-label="插件设置">{busy&&<Spinner label="读取设置"/>}{feedback}{error&&<Button onPress={()=>transaction(()=>load())}>重试</Button>}</main>;
   if(page==='media')return <main className="settings-main" aria-label="插件设置">{navigation}<p id="description" className="sr-only">{copy.description}</p><MediaWorkspace onBusyChange={setBusy}/>{feedback}</main>;
   if(page==='profiles')return <main className="settings-main" aria-label="插件设置">{navigation}<p id="description" className="sr-only">{copy.description}</p>

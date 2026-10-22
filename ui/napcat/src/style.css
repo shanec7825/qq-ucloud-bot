@@ -11,7 +11,6 @@ button:not(:disabled),summary{cursor:pointer}
 button:focus-visible,summary:focus-visible{outline:2px solid hsl(var(--heroui-focus));outline-offset:3px}
 input,textarea,main,form,#fields{min-width:0}
 main,form,#fields{width:100%}
-.ui-icon{display:block;flex-shrink:0;pointer-events:none}
 
 /* The shell owns the theme. Surfaces and accents use its HeroUI tokens. */
 .settings-main{
@@ -97,14 +96,6 @@ main,form,#fields{width:100%}
 .connection-actions{margin-top:20px}
 .connection-actions button{border-width:1px}
 .status-line{margin-bottom:20px}
-.status-pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--settings-muted);background:hsl(var(--heroui-default-100)/.75);padding:5px 10px;border-radius:6px}
-.status-pill:before{content:'';width:6px;height:6px;flex-shrink:0;border-radius:50%;background:currentColor}
-.status-pill.success{color:hsl(var(--heroui-success-600));background:hsl(var(--heroui-success)/.1)}
-.status-pill.danger{color:hsl(var(--heroui-danger));background:hsl(var(--heroui-danger)/.1)}
-.feedback{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:16px}
-.feedback:empty{display:none}
-.feedback.error{color:hsl(var(--heroui-danger))}
-.feedback.success{color:hsl(var(--heroui-success-600))}
 .empty-label{font-size:13px;color:hsl(var(--heroui-default-500));padding:12px 4px}
 .reader-body{padding:4px 0;font-size:14px;line-height:1.8}
 .status-actions{margin-bottom:20px}
