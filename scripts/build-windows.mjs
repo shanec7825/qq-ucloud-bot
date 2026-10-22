@@ -18,12 +18,12 @@ await copyFile(join(root, 'desktop/QQAgent.exe.config'), join(app, 'QQAgent.exe.
 await copyFile(join(root, 'desktop/assets/home.html'), join(app, 'assets/home.html'));
 const nodeFolder = join(root, 'tools/desktop/node/node-' + versions.node + '-win-x64');
 await copyFile(join(nodeFolder, 'node.exe'), join(app, 'runtime/node.exe')); await copyFile(join(nodeFolder, 'LICENSE'), join(app, 'runtime/LICENSE-Node.txt'));
-for (const name of ['README.md', 'README.Windows.md', 'THIRD_PARTY.md']) await copyFile(join(root, name), join(app, name));
+for (const name of ['README.md', 'README.Windows.md', 'THIRD_PARTY.md', 'LICENSE']) await copyFile(join(root, name), join(app, name));
 await copyFile(join(root, 'docs/CONFIGURATION.md'), join(app, 'docs/CONFIGURATION.md'));
 await copyFile(join(root, 'docs/PLUGIN-DISTRIBUTION.md'), join(app, 'docs/PLUGIN-DISTRIBUTION.md'));
 await copyFile(join(root, 'docs/WORKSPACE-ARCHITECTURE.md'), join(app, 'docs/WORKSPACE-ARCHITECTURE.md'));
 await copyFile(join(root, 'docs/NAPCAT-NATIVE-UI.md'), join(app, 'docs/NAPCAT-NATIVE-UI.md'));
-for (const name of ['ACCOUNT-PERSONAS.md', 'GROUP-NOTICES.md']) await copyFile(join(root, 'docs', name), join(app, 'docs', name));
+for (const name of ['ACCOUNT-PERSONAS.md', 'GROUP-NOTICES.md', 'MEDIA-MESSAGES.md', 'DEEPSEEK.md']) await copyFile(join(root, 'docs', name), join(app, 'docs', name));
 await mkdir(join(app, 'docs/releases'), { recursive: true });
 await copyFile(join(root, 'docs/releases/v' + pkg.version + '.md'), join(app, 'docs/releases/v' + pkg.version + '.md'));
 try { await copyFile(join(sdk, 'LICENSE.txt'), join(app, 'LICENSE-WebView2.txt')); } catch { throw new Error('WebView2 license missing'); }
@@ -44,7 +44,7 @@ async function collect(path, prefix) {
   }
 }
 for (const folder of ['src', 'scripts', 'napcat-plugin', 'public', 'licenses', 'node_modules']) await collect(join(root, folder), folder + '/');
-for (const file of ['package.json', 'package-lock.json', 'desktop/versions.json']) files[file] = new Uint8Array(await readFile(join(root, file)));
+for (const file of ['package.json', 'package-lock.json', 'desktop/versions.json', 'LICENSE']) files[file] = new Uint8Array(await readFile(join(root, file)));
 const paths = Object.keys(files);
 if (paths.some(path => /(?:^|\/)(?:data|tools|\.git|\.env[^/]*)\//.test(path) || path.startsWith('data/') || path.startsWith('tools/'))) throw new Error('发行包混入个人目录。');
 await writeFile(join(app, 'backend.zip'), zipSync(files, { level: 6 }));

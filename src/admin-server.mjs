@@ -5,12 +5,13 @@ import { loginSchool } from './school-login.mjs';
 import { saveJSON } from './core.mjs';
 import { memoryScope } from './managed-memory.mjs';
 import { GROUP_TEMPLATES } from './group-templates.mjs';
+import { validateMimoKey } from './xiaomi-speech.mjs';
 
 const fail = (status, message) => { const error = new Error(message); error.status = status; throw error; };
-async function body(request) {
+async function body(request, limit = 100000) {
   if (!String(request.headers['content-type'] || '').startsWith('application/json')) fail(415, '请使用 JSON 请求。');
   const chunks = []; let size = 0;
-  for await (const chunk of request) { size += chunk.length; if (size > 100000) fail(413, '请求过大。'); chunks.push(chunk); }
+  for await (const chunk of request) { size += chunk.length; if (size > limit) fail(413, '请求过大。'); chunks.push(chunk); }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { fail(400, 'JSON 格式无效。'); }
 }
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -62,6 +63,23 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (route === '/api/logout' && req.method === 'POST') { sessions.delete(token); json({ ok: true }, 200, { 'set-cookie': 'slyra_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' }); return; }
       if (route === '/api/state' && req.method === 'GET') { json({ settings: store.get(), groupTemplates: GROUP_TEMPLATES, secrets: vault.flags(), status: await runtime.status(), googleRedirectURI: origin + '/oauth/google/callback' }); return; }
       if (route === '/api/workspace' && req.method === 'GET') { json(runtime.workspace()); return; }
+      if (route === '/api/media' && req.method === 'GET') { json({ items: await runtime.outgoingMedia.list() }); return; }
+      if (route === '/api/media' && req.method === 'POST') {
+        const input = await body(req, 12 * 1024 * 1024);
+        if (!input || Object.keys(input).sort().join() !== 'accountId,base64,kind,name,targetId,type' || !store.get().accounts.some(a => a.id === input.accountId)) fail(400, '素材字段或账号无效。');
+        json({ item: await runtime.outgoingMedia.put(input) }); return;
+      }
+      if (/^\/api\/media\/[a-f0-9]{32}$/.test(route) && req.method === 'DELETE') { await runtime.outgoingMedia.remove(route.split('/').at(-1)); json({ ok: true }); return; }
+      if (route === '/api/media/preview' && req.method === 'POST') {
+        const input = await body(req), { item, bytes } = await runtime.outgoingMedia.bytes(input.id);
+        json({ dataURL: `data:image/${item.mime};base64,${bytes.toString('base64')}` }); return;
+      }
+      if (route === '/api/speech/preview' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Object.keys(input).some(key => !['text','style'].includes(key))) fail(400, '试听字段无效。');
+        const part = await runtime.speech.synthesize(input.text, 'admin-preview', { style: input.style ?? '' });
+        json({ dataURL: 'data:audio/wav;base64,' + part.data.file.slice(9) }); return;
+      }
       if (route === '/api/inbox' && req.method === 'GET') { json(await runtime.inbox.list()); return; }
       if (route === '/api/inbox/item' && req.method === 'PUT') {
         const input = await body(req);
@@ -79,8 +97,9 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
         runtime.checks = {}; runtime.apply(); json({ settings: next }); return;
       }
       if (route === '/api/secrets' && req.method === 'PUT') {
-        const input = await body(req), allowed = ['onebotToken', 'openaiKey', 'githubToken', 'googleClientSecret'];
+        const input = await body(req), allowed = ['onebotToken', 'openaiKey', 'deepseekKey', 'mimoKey', 'githubToken', 'googleClientSecret'];
         if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !allowed.includes(key) && !(/^onebotToken:[A-Za-z0-9_-]{1,40}$/.test(key) && store.get().accounts?.some(account => key === 'onebotToken:' + account.id)))) fail(400, '不支持的密钥字段。');
+        if (input.mimoKey !== undefined && input.mimoKey !== null) validateMimoKey(input.mimoKey);
         if (Object.hasOwn(input, 'googleClientSecret') && input.googleClientSecret !== vault.get('googleClientSecret')) input.googleTokens = null;
         const flags = await vault.set(input); runtime.credentialVersion = (runtime.credentialVersion || 0) + 1; runtime.checks = {}; runtime.apply(); json({ secrets: flags }); return;
       }
@@ -97,6 +116,29 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (route === '/api/google/authorize' && req.method === 'POST') { json(runtime.google.begin(origin, token, { write: store.get().drive.accessMode === 'write' })); return; }
       if (/^\/api\/check\/(github|drive|ucloud|model)$/.test(route) && req.method === 'POST') { json(await runtime.check(route.split('/').at(-1))); return; }
       if (route === '/api/groups' && req.method === 'GET') { json({ groups: await runtime.groups() }); return; }
+      if (route === '/api/qq/contacts' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Object.keys(input).some(k => k !== 'accountId') || typeof input.accountId !== 'string' || !store.get().accounts.some(a => a.id === input.accountId && a.enabled)) fail(400, '请选择已启用的 QQ 账号。');
+        json(await runtime.contacts(input.accountId)); return;
+      }
+      if (route === '/api/ucloud/view' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Object.keys(input).some(k => !['section','id','page'].includes(k)) || !['tasks','notices','detail'].includes(input.section)) fail(400, '无效的教学云查看请求。');
+        if (!runtime.config().school.enabled) fail(400, '请先开启并保存教学云连接。');
+        try {
+        if (input.section === 'detail') {
+          if (typeof input.id !== 'string' || !/^\d{1,30}$/.test(input.id)) fail(400, '作业 ID 无效。');
+          json({ content: await runtime.school.detail(input.id) });
+        } else if (input.section === 'notices') {
+          if (input.page !== undefined && (!Number.isInteger(input.page) || input.page < 1 || input.page > 500)) fail(400, '通知页码无效。');
+          json(await runtime.school.notices(input.page || 1));
+        } else json({ items: await runtime.school.tasks() });
+        } catch (error) {
+          if (/^RENEWAL_/.test(error.code || '') || [401,403].includes(error.status)) fail(400, '教学云登录已过期，请重新登录。');
+          throw error;
+        }
+        return;
+      }
       if (route === '/api/codex/account' && req.method === 'GET') { json(await runtime.account.status()); return; }
       if (route === '/api/codex/login' && req.method === 'POST') { json(await runtime.account.begin()); return; }
       if (route === '/api/monitor' && req.method === 'GET') { json(await runtime.monitor.status()); return; }

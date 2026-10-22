@@ -1,3 +1,5 @@
+import { modelField } from './ai-providers.mjs';
+
 export function resolveConversation(config, event = {}) {
   const accountId = event.accountId || 'default', kind = event.message_type === 'private' ? 'private' : 'group';
   const targetId = String(kind === 'group' ? event.group_id : event.user_id);
@@ -22,5 +24,5 @@ export function profileSettings(config, id, accountId = 'default', kind = 'group
   const { profile } = resolveConversation(config, { accountId, message_type: kind, group_id: id, user_id: id });
   if (!profile) return config;
   return { ...config, bot: { ...config.bot, name: profile.name, systemPrompt: profile.systemPrompt },
-    ai: { ...config.ai, ...(profile.model ? config.ai.backend === 'api' ? { apiModel: profile.model } : { model: profile.model } : {}) } };
+    ai: { ...config.ai, ...(profile.model ? { [modelField(config.ai.backend)]: profile.model } : {}) } };
 }

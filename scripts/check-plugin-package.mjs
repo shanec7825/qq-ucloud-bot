@@ -16,7 +16,7 @@ try {
     const files = unzipSync(await readFile(join(root, 'release', pkg.version, plugin.id + '.zip')));
     const meta = JSON.parse(Buffer.from(files['package.json']).toString()), deployment = JSON.parse(Buffer.from(files['deployment.json']).toString());
     assert.equal(meta.name, plugin.id); assert.equal(meta.version, pkg.version); assert.equal(deployment.projectRoot, undefined); assert.equal(deployment.nodeBinary, undefined);
-    assert.ok(files['index.mjs']); assert.ok(files['native-config.mjs']);
+    assert.ok(files['index.mjs']); assert.ok(files['native-config.mjs']); assert.ok(files['speech-config.mjs']);
     for (const name of ['index.html', 'app.js', 'style.css', 'copy.mjs', 'THIRD-PARTY.txt']) assert.ok(files['webui/' + name]);
     assert.ok(!Object.keys(files).some(name => name.startsWith('data/')));
   }

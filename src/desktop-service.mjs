@@ -11,6 +11,7 @@ import { AdminBridge } from '../napcat-plugin/bridge.mjs';
 import { ensureEngine } from '../napcat-plugin/engine.mjs';
 import { PLUGIN_MODULES } from '../napcat-plugin/catalog.mjs';
 import { protectSchoolSecret, unprotectSchoolSecret } from './school-secret.mjs';
+import { selectedModel } from './ai-providers.mjs';
 
 const exec = promisify(execFile), origin = 'http://127.0.0.1:6099';
 async function runtimeOwner() {
@@ -76,7 +77,7 @@ export class DesktopService {
       const credential = await this.session(), qq = await this.native('QQLogin/CheckLoginStatus', {}, credential);
       state.webuiAvailable = true; state.qqLoggedIn = !!qq.isLogin; state.loginPhase = qq.loginPhase || '';
     } catch (error) { if (error.code === 'WORKSPACE_MISMATCH') { state.workspaceError = error.message; } /* A stopped service is a normal launcher state. */ }
-    try { const response = await new AdminBridge(this.root).request('GET', 'state'); if (response.status === 200) { state.botConnected = response.data.status.qq.connected; state.botName = response.data.settings.bot.name; state.model = response.data.settings.ai.backend === 'codex' ? response.data.settings.ai.model : response.data.settings.ai.apiModel; } } catch {}
+    try { const response = await new AdminBridge(this.root).request('GET', 'state'); if (response.status === 200) { state.botConnected = response.data.status.qq.connected; state.botName = response.data.settings.bot.name; state.model = selectedModel(response.data.settings); } } catch {}
     return state;
   }
   async detached(binary, args, name, env = childEnv()) {

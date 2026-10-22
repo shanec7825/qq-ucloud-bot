@@ -26,6 +26,9 @@ function markDirty() { dirty = true; $('#save-state').textContent = '有未保�
 function dependencies() {
   const backend = $('[data-setting="ai.backend"]').value;
   $('#api-options').hidden = backend !== 'api'; $('#codex-model').hidden = backend !== 'codex'; $('#codex-help').hidden = backend !== 'codex';
+  $('#deepseek-options').hidden = backend !== 'deepseek'; $('#harness-options').hidden = backend !== 'deepseek-harness';
+  $('#deepseek-key-options').hidden = backend !== 'deepseek' && !(backend === 'deepseek-harness' && $('[data-setting="ai.harnessAuth"]').value === 'api-key');
+  for (const id of ['codex-status','codex-login','codex-account-state']) $('#' + id).hidden = backend !== 'codex';
   const token = $('[data-setting="github.authMode"]').value === 'token';
   $('#github-token-options').hidden = !token; $('#github-existing-help').hidden = $('[data-setting="github.authMode"]').value !== 'existing';
   $('#github-chatgpt-help').hidden = $('[data-setting="github.authMode"]').value !== 'chatgpt';

@@ -7,9 +7,10 @@ import { templateSystemPrompt } from './group-templates.mjs';
 export function codexArgs(model, images = []) {
   const args = ['exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--ephemeral', '--json', '--sandbox', 'read-only',
     '-c', 'approval_policy="never"', '-c', 'web_search="disabled"', '-c', 'project_doc_max_bytes=0', '-c', 'mcp_servers={}',
-    '-c', 'forced_login_method="chatgpt"'];
+    '-c', 'forced_login_method="chatgpt"',
+    '-c', 'model_instructions_file=' + JSON.stringify(fileURLToPath(new URL('./qq-model-instructions.md', import.meta.url)))];
   // 机器人只把已授权的文本传给模型；模型进程不获得本机命令、连接器或其他会话工具。
-  for (const flag of ['shell_tool', 'unified_exec', 'apps', 'plugins', 'remote_plugin', 'hooks', 'memories', 'multi_agent', 'goals', 'computer_use', 'browser_use', 'image_generation', 'skill_search', 'code_mode_host']) args.push('--disable', flag);
+  for (const flag of ['shell_tool', 'unified_exec', 'apps', 'plugins', 'remote_plugin', 'hooks', 'memories', 'multi_agent', 'goals', 'computer_use', 'browser_use', 'image_generation', 'skill_search', 'code_mode', 'code_mode_only', 'code_mode_only_strict_3p_tools', 'code_mode_host']) args.push('--disable', flag);
   if (model) args.push('--model', model);
   for (const image of images.slice(0, 3)) args.push('--image', image);
   return [...args, '-'];
@@ -25,33 +26,43 @@ export async function askCodex(question, context, env = process.env, spawner = s
     const images = [...(context?.messageMedia?.images || []), ...(context?.library?.images || [])].slice(0, 3);
     const model = env.CODEX_MODEL || 'gpt-6-luna';
     const child = spawner(env.CODEX_BIN || 'codex', codexArgs(model, images.map(image => image.path)), { cwd, env: childEnv, windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
-    let buffer = ''; let size = 0; let completed = false; let failed = false; let answer = '';
-    const timer = setTimeout(() => { child.kill(); reject(new Error('订阅 AI 请求超时，请稍后重试。')); }, 180000);
-    const fail = () => { clearTimeout(timer); reject(new Error('订阅 AI 不可用，请运行 codex login 检查 ChatGPT 登录、模型权限和订阅额度。')); };
+    let buffer = ''; let size = 0; let settled = false; let answer = '';
+    const timer = setTimeout(() => finish(new Error('订阅 AI 请求超时，请稍后重试。')), 180000);
+    const finish = error => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      error ? reject(error) : resolve(answer);
+      // turn.completed is authoritative. Process shutdown can take seconds after
+      // completion; it must not hold up an already final reply.
+      child.kill();
+    };
+    const fail = () => finish(new Error('订阅 AI 不可用，请运行 codex login 检查 ChatGPT 登录、模型权限和订阅额度。'));
     child.on('error', fail);
     child.stdin.on('error', () => {});
     child.stderr.resume();
     child.stdout.setEncoding('utf8');
     const consume = line => {
+      if (settled) return;
       try {
         const event = JSON.parse(line);
-        if (event.type === 'turn.completed') completed = true;
-        if (['turn.failed', 'error'].includes(event.type)) failed = true;
-        if (event.type === 'item.completed' && event.item?.type === 'agent_message') answer = event.item.text;
-        if (event.item && ['command_execution', 'mcp_tool_call', 'file_change', 'web_search'].includes(event.item.type)) { failed = true; child.kill(); }
+        if (['turn.failed', 'error'].includes(event.type)) { fail(); return; }
+        if (event.item && ['command_execution', 'mcp_tool_call', 'file_change', 'web_search'].includes(event.item.type)) { fail(); return; }
+        if (event.type === 'item.completed' && event.item?.type === 'agent_message' && typeof event.item.text === 'string') answer = event.item.text;
+        if (event.type === 'turn.completed') { if (answer.trim()) finish(); else fail(); }
       } catch { /* 忽略非 JSON 诊断行，绝不转发给 QQ。 */ }
     };
     child.stdout.on('data', chunk => {
+      if (settled) return;
       size += Buffer.byteLength(chunk, 'utf8');
-      if (size > 2 * 1024 * 1024) { failed = true; child.kill(); return; }
+      if (size > 2 * 1024 * 1024) { fail(); return; }
       buffer += chunk.toString('utf8');
       let index;
-      while ((index = buffer.indexOf('\n')) >= 0) { consume(buffer.slice(0, index)); buffer = buffer.slice(index + 1); }
+      while ((index = buffer.indexOf('\n')) >= 0) { const line = buffer.slice(0, index); buffer = buffer.slice(index + 1); consume(line); }
     });
-    child.on('close', code => {
-      clearTimeout(timer); if (buffer.trim()) consume(buffer);
-      if (code === 0 && completed && !failed && answer?.trim()) resolve(answer);
-      else fail();
+    child.on('close', () => {
+      if (settled) return;
+      if (buffer.trim()) consume(buffer);
+      if (!settled) fail();
     });
     const promptContext = { ...context };
     promptContext.runtime = { botName: env.BOT_NAME || 'slyra', model };

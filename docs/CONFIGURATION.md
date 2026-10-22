@@ -10,7 +10,7 @@ npm.cmd run napcat:install -- --trust-local-plugin
 npm.cmd run admin:open
 ```
 
-运行 NapCat 并登录机器人 QQ。配置入口为 **NapCat → 插件管理 → 对应卡片的配置齿轮**，默认 `http://127.0.0.1:6099/webui/plugins`。五个模块共用本机后端与一份设置：机器人核心、GitHub、Google Drive、UCloud、群通知整理。使用 NapCat 原生输入框、开关和「保存」；切换分类前先保存。也可使用 NapCat 的“扩展页面”：表单采用同版本 HeroUI 控件，沿用原版外层与主题。内部 6100 服务承担本机 API 与 OAuth 回调。
+运行 NapCat 并登录机器人 QQ。常用入口为 **NapCat → 扩展页面**，默认 `http://127.0.0.1:6099/webui/extension`。插件卡片的原生配置也保留，可点击其中的“打开工作台”。机器人、GitHub、Google Drive、教学云、群消息共用本机后端与一份设置。切换页面前先保存；内部 6100 服务承担本机 API 与 OAuth 回调。
 
 安装脚本的 `--trust-local-plugin` 为本项目固定插件 ID 添加本机信任例外，安装前备份相关文件。NapCat 更新后可能需要重新安装；不要删除 `data/` 或 `tools/`。关闭配置窗口不会停止共享后端，停用模块会停止对应能力。
 
@@ -18,7 +18,7 @@ npm.cmd run admin:open
 
 核心页配置昵称、主人 QQ、模型、ChatGPT 登录、共享教材和允许的群。群聊必须真正 @ 机器人，私聊无需 @。通知监测群禁止出站回复。主人 QQ 用于私人资料及工具授权，普通聊天不要求配置主人。
 
-「角色与语气」保存可复用提示词与模型设置；「QQ 账号连接」保存每个 OneBot 连接及默认人格；「会话角色分配」把特定账号的会话绑定到人格。每个账号需要独立运行并登录的 NapCat 实例。详细优先级和记忆隔离见 [账号与人格](ACCOUNT-PERSONAS.md)。
+「人格」只编辑名称和系统提示词；「QQ 账号」保存每个 OneBot 连接及默认人格；「分配」选择账号、群或好友以及人格。每个账号需要独立运行并登录的 NapCat 实例。详细优先级和记忆隔离见 [账号与人格](ACCOUNT-PERSONAS.md)。
 
 默认使用本机官方 Codex 的 ChatGPT 登录和订阅可用模型，也可选择 OpenAI 兼容 API。API 单独配置和计费；订阅失败不会自动改用 API。私人检索正文会交给所选回答模型，ChatGPT 插件凭据不会交给第三方模型。
 
@@ -50,3 +50,7 @@ UCloud 是可选北邮模块，登录学校后查询近期作业。个人文字�
 配置在 `data/settings.json`，首次从环境初始化后以保存设置为准。v2 升级 v3 前保留 `data/settings.v2.backup.json`。授权密钥在加密凭据文件，Windows 使用当前用户 DPAPI；换电脑或 Windows 用户需重新授权。不要上传 `.env`、`data/` 和 `tools/`。故障先检查 `data/napcat-engine.log`，公开日志前移除认证信息。
 
 本地测试和隔离界面检查不代表真实 QQ 或外部写入验证。公开下载安装见 [README](../README.md)，本地候选包与公开版本分开。
+
+## DeepSeek
+
+“模型”中可选择 **DeepSeek API** 或 **DeepSeek Harness**，各自保留模型名称，API Key 与自定义 API 分开加密保存。Harness 支持 API Key 和本机官方桌面端已有账号两种授权方式。组件准备、授权范围及验证状态见 [DeepSeek 接入](DEEPSEEK.md)。

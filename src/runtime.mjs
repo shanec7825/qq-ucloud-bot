@@ -14,10 +14,15 @@ import { PublicCatalog, upcoming } from './access.mjs';
 import { PrivateResources } from './resources.mjs';
 import { GoogleDrive } from './google-drive.mjs';
 import { askCodex } from './codex-ai.mjs';
+import { askDeepSeek } from './deepseek-ai.mjs';
+import { askHarness } from './deepseek-harness.mjs';
 import { ConversationMemory, loadPersona } from './persona.mjs';
 import { createMessageHandler } from './message-handler.mjs';
 import { SharedLibrary } from './shared-library.mjs';
 import { MessageMedia } from './message-media.mjs';
+import { OutgoingMedia } from './outgoing-media.mjs';
+import { XiaomiSpeech } from './xiaomi-speech.mjs';
+import { speechDirection, planSpeechStyle } from './speech-direction.mjs';
 import { HistoryDigest } from './history-digest.mjs';
 import { ManagedMemory } from './managed-memory.mjs';
 import { modelEnv } from './settings.mjs';
@@ -63,6 +68,8 @@ export class BotRuntime {
       },
     };
     this.media = new MessageMedia(this.proxy);
+    this.outgoingMedia = new OutgoingMedia(root);
+    this.speech = new XiaomiSpeech({ settings: () => this.store.get().speech, key: () => this.vault.get('mimoKey') });
     this.monitor = new NoticeMonitor({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), send: (target, text) => this.proxy.send(target, text), root: new URL('notices/', root) });
     this.realtime = new RealtimeNotices({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), send: (target, text, options) => this.proxy.send(target, text, options) });
     this.inbox = new MessageWorkspace({ monitor: this.monitor, root });
@@ -94,11 +101,15 @@ export class BotRuntime {
     return config;
   }
   env(config = this.store.get()) {
-    return modelEnv(config, { openaiKey: this.vault.get('openaiKey'), githubToken: config.github.authMode === 'token' ? this.vault.get('githubToken') : '' });
+    return modelEnv(config, { openaiKey: this.vault.get('openaiKey'), deepseekKey: this.vault.get('deepseekKey'), githubToken: config.github.authMode === 'token' ? this.vault.get('githubToken') : '' });
   }
   async ai(question, context, config = this.config()) {
     const env = this.env(config);
-    return config.ai.backend === 'api' ? askAI(question, context, env) : askCodex(question, context, env);
+    if (config.ai.backend === 'api') return askAI(question, context, env);
+    if (config.ai.backend === 'deepseek') return askDeepSeek(question, context, env);
+    if (config.ai.backend === 'deepseek-harness') return askHarness(question, context, env);
+    if (config.ai.backend === 'codex') return askCodex(question, context, env);
+    throw new Error('未知模型来源，请重新选择模型服务。');
   }
   agent(config) {
     const live = () => this.config();
@@ -159,7 +170,12 @@ export class BotRuntime {
     const observable = !this.stopped && (base.accounts?.find(a => a.id === accountId)?.enabled ?? accountId === 'default') && (!event?.transportGeneration || this.transports.get(accountId)?.generation === event.transportGeneration);
     return { enabled: observable && (!event || !Object.hasOwn(event, 'profileId') || event.profileId === conversation.profileId) && (conversation.kind !== 'private' || conversation.enabled) && moduleActive(this.root, 'core'), observeEnabled: observable, observe: event => { this.realtime.observe(event); if (moduleActive(this.root, 'core') && conversation.enabled) services.media.remember?.(event); }, capabilities: JSON.stringify(config), groups: policies.filter(g => g.canReply).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
       resources: this.resources(config), agent: this.agent(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: services.media, members: services.members,
-      stickers: { list: event => services.media.listStickers(event), send: (event, id) => this.proxy.sendSegments({ ...(event.message_type === 'group' ? { group_id: String(event.group_id) } : { user_id: String(event.user_id) }), accountId }, [services.media.outgoingSticker(event, id)]) },
+      outgoingMedia: { list: event => this.outgoingMedia.available(event), outgoing: (event, id) => this.outgoingMedia.outgoing(event, id), collect: (event, input) => this.outgoingMedia.collect(event, input, { call: (action, params) => this.proxy.call(action, params, { accountId }) }) },
+      speech: { ...speechDirection(config.speech), autoReply: config.speech.enabled && config.speech.autoReply,
+        plan: (text, event) => planSpeechStyle(text, { ai: (q, c) => this.ai(q, c, config), direction: speechDirection(config.speech), conversation: this.memory.get(event).slice(-4).map(row => ({ speaker: row.speaker, text: row.text })) }),
+        synthesize: (text, event, direction) => this.speech.synthesize(text, [accountId, event.message_type, event.group_id || event.user_id].join(':'), direction),
+        synthesizeBatch: (requests, event) => this.speech.synthesizeBatch(requests, [accountId, event.message_type, event.group_id || event.user_id].join(':')) },
+      stickers: { list: event => services.media.listStickers(event), outgoing: (event, id) => services.media.outgoingSticker(event, id), send: (event, id) => this.proxy.sendSegments({ ...(event.message_type === 'group' ? { group_id: String(event.group_id) } : { user_id: String(event.user_id) }), accountId }, [services.media.outgoingSticker(event, id)]) },
       notes: config.memory.enabled ? { context: event => this.notes.context(event, { profileId: conversation.profileId, accountId }) } : null, monitor: this.monitor, groupTemplate: id => groupTemplate(config.groups.find(group => group.id === id)),
       history: accountId === 'default' && !conversation.profileId && config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
       persona: accountId === 'default' && !conversation.profileId ? loadPersona : async () => ({ voice: [], learned: false }), shareDocumentsWithModel: config.library.sendToModel, transportVersion: this.transportVersion,
@@ -276,6 +292,16 @@ export class BotRuntime {
     const rows = await this.proxy.call('get_group_list', {}, { accountId });
     return (Array.isArray(rows) ? rows : []).map(g => ({ id: String(g.group_id), name: String(g.group_name || '').slice(0, 80) }));
   }
+  async contacts(accountId = 'default') {
+    const [groups, friends] = await Promise.allSettled([
+      this.groups(accountId), this.proxy.call('get_friend_list', {}, { accountId }),
+    ]);
+    return {
+      groups: groups.status === 'fulfilled' ? groups.value : [],
+      friends: friends.status === 'fulfilled' && Array.isArray(friends.value) ? friends.value.map(f => ({ id: String(f.user_id), name: String(f.remark || f.nickname || f.user_id).slice(0, 80) })) : [],
+      errors: [groups.status === 'rejected' && '群列表读取失败，请检查这个 QQ 是否在线。', friends.status === 'rejected' && '好友列表读取失败，请检查这个 QQ 是否在线。'].filter(Boolean),
+    };
+  }
   async check(service) {
     try {
       let message;
@@ -289,7 +315,8 @@ export class BotRuntime {
       const messages = { github: '连接失败，请检查 Token 权限或已有 gh 登录。', drive: '连接失败，请检查 Google 授权、Drive API 或已有 rclone 登录。', model: '连接失败，请检查模型名、登录与额度。', ucloud: '连接失败，请重新登录学校账号。' };
       const config = this.store.get();
       const native = service === 'drive' && config.drive.authMode === 'chatgpt' || service === 'github' && config.github.authMode === 'chatgpt';
-      return this.checks[service] = { ok: false, message: native ? 'ChatGPT 插件读取失败，请确认本机 Codex 使用同一账号且插件已连接。' : messages[service] || '连接失败。', checkedAt: new Date().toISOString() };
+      const modelMessage = service === 'model' && ['deepseek', 'deepseek-harness'].includes(config.ai.backend) ? error instanceof TypeError ? 'DeepSeek 网络请求失败，请检查网络连接。' : error.message : null;
+      return this.checks[service] = { ok: false, message: native ? 'ChatGPT 插件读取失败，请确认本机 Codex 使用同一账号且插件已连接。' : modelMessage || messages[service] || '连接失败。', checkedAt: new Date().toISOString() };
     }
   }
 }

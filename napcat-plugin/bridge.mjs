@@ -2,10 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export function allowedRoute(method, path) {
-  const rules = { GET: /^(?:session|state|workspace|inbox|groups|memory|monitor|codex\/account)$/,
+  const rules = { GET: /^(?:session|state|workspace|inbox|groups|memory|monitor|media|codex\/account)$/,
     PUT: /^(?:settings|secrets|inbox\/item|memory\/notes|memory\/digest)$/,
-    POST: /^(?:runtime\/stop|codex\/login|monitor\/run|ucloud\/login|google\/authorize|check\/(?:github|drive|ucloud|model))$/,
-    DELETE: /^(?:memory\/conversations|memory\/notes\/[\w-]{1,100})$/ };
+    POST: /^(?:media(?:\/preview)?|speech\/preview|runtime\/stop|codex\/login|monitor\/run|ucloud\/(?:login|view)|qq\/contacts|google\/authorize|check\/(?:github|drive|ucloud|model))$/,
+    DELETE: /^(?:media\/[a-f0-9]{32}|memory\/conversations|memory\/notes\/[\w-]{1,100})$/ };
   return typeof method === 'string' && Object.hasOwn(rules, method) && typeof path === 'string' && rules[method].test(path);
 }
 
@@ -29,7 +29,7 @@ export class AdminBridge {
   }
   async request(method, path, value, retry = true) {
     if (!allowedRoute(method, path)) return { status: 400, data: { error: '不支持的配置操作。' } };
-    if (JSON.stringify(value ?? null).length > 90000) return { status: 413, data: { error: '请求内容过大。' } };
+    if (JSON.stringify(value ?? null).length > (method === 'POST' && path === 'media' ? 12 * 1024 * 1024 : 90000)) return { status: 413, data: { error: '请求内容过大。' } };
     const session = await this.session();
     // The bridge cookie, bootstrap key and CSRF token never leave the plugin server.
     if (path === 'session') return { status: 200, data: { csrf: 'napcat-session' } };

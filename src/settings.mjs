@@ -2,6 +2,8 @@ import { readJSON, saveJSON } from './core.mjs';
 import { templateIds } from './group-templates.mjs';
 import { migrateSettings } from './settings-migrations.mjs';
 import { writeFile } from 'node:fs/promises';
+import { AI_BACKENDS, DEEPSEEK_DEFAULTS } from './ai-providers.mjs';
+import { SPEECH_DEFAULTS, SPEECH_MODELS, SPEECH_VOICES, SPEECH_ENDPOINTS } from '../napcat-plugin/speech-config.mjs';
 
 export const DEFAULT_PROMPT = '自然随意地交流，可以幽默、接梗。根据问题决定详略；需要解释时把问题讲清楚。';
 const qq = value => typeof value === 'string' && /^\d{5,15}$/.test(value);
@@ -13,10 +15,12 @@ const address = (value, protocols) => {
 };
 const local = value => ['localhost', '127.0.0.1', '[::1]'].includes(new URL(value).hostname);
 const rules = {
+  speech: { enabled: bool, autoReply: bool, autoStyle: bool, baseURL: v => SPEECH_ENDPOINTS.includes(v), model: v => SPEECH_MODELS.includes(v), voice: v => SPEECH_VOICES.includes(v), voiceDescription: v => text(v, 500), style: v => text(v, 500), maxChars: v => integer(v, 20, 1000) },
   realtime: { enabled: bool, groups: v => Array.isArray(v) && v.length <= 20 && v.every(qq) && new Set(v).size === v.length, recipientQQ: v => v === '' || qq(v), accountId: v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v), debounceSeconds: v => integer(v, 1, 120), focus: v => text(v, 2000) },
   agent: { enabled: bool, writes: bool, maxSteps: v => integer(v, 1, 8) },
   bot: { name: v => text(v, 40) && !!v.trim(), ownerQQ: v => v === '' || qq(v), systemPrompt: v => text(v, 12000) },
-  ai: { backend: v => ['codex', 'api'].includes(v), model: v => text(v, 100) && !!v.trim(), baseURL: v => address(v, ['https:', 'http:']) && (v.startsWith('https:') || local(v)), apiModel: v => text(v, 100) },
+  ai: { backend: v => AI_BACKENDS.includes(v), model: v => text(v, 100) && !!v.trim(), baseURL: v => address(v, ['https:', 'http:']) && (v.startsWith('https:') || local(v)), apiModel: v => text(v, 100),
+    deepseekModel: v => text(v, 100) && !!v.trim(), deepseekThinking: bool, harnessModel: v => text(v, 100) && !!v.trim(), harnessAuth: v => ['api-key', 'account'].includes(v) },
   qq: { url: v => address(v, ['ws:', 'wss:']) && (v.startsWith('wss:') || local(v)) },
   school: { enabled: bool, pollSeconds: v => integer(v, 60, 86400), reminders: bool },
   github: { enabled: bool, authMode: v => ['chatgpt', 'existing', 'token'].includes(v), defaultRepo: v => v === '' || /^[\w.-]+\/[\w.-]+$/.test(v) && v.length <= 200 },
@@ -36,8 +40,10 @@ export function defaults(env = {}) {
     version: 3, revision: 0, profiles: [], accounts: [{ id: 'default', name: 'Default QQ', enabled: true, url: env.ONEBOT_WS_URL || 'ws://127.0.0.1:3001', defaultProfileId: '' }], bindings: [],
     realtime: { enabled: false, groups: [], recipientQQ: '', accountId: 'default', debounceSeconds: 10, focus: '\u8003\u8bd5\u3001\u9009\u8bfe\u3001\u62a5\u540d\u3001\u6750\u6599\u63d0\u4ea4\u3001\u622a\u6b62\u65f6\u95f4\u3001\u8bfe\u7a0b\u8c03\u6574\u3001\u5956\u52a9\u8bc4\u4f18\u53ca\u91cd\u8981\u6d3b\u52a8\u3002' }, agent: { enabled: false, writes: false, maxSteps: 4 },
     bot: { name: env.BOT_NAME || 'slyra', ownerQQ: env.OWNER_QQ || '', systemPrompt: env.BOT_SYSTEM_PROMPT || DEFAULT_PROMPT },
-    ai: { backend: env.AI_BACKEND === 'api' ? 'api' : 'codex', model: env.CODEX_MODEL || 'gpt-6-luna', baseURL: env.OPENAI_BASE_URL || 'https://api.openai.com/v1', apiModel: env.OPENAI_MODEL || '' },
+    ai: { backend: AI_BACKENDS.includes(env.AI_BACKEND) ? env.AI_BACKEND : 'codex', model: env.CODEX_MODEL || 'gpt-6-luna', baseURL: env.OPENAI_BASE_URL || 'https://api.openai.com/v1', apiModel: env.OPENAI_MODEL || '',
+      ...DEEPSEEK_DEFAULTS, deepseekModel: env.DEEPSEEK_MODEL || DEEPSEEK_DEFAULTS.deepseekModel, deepseekThinking: env.DEEPSEEK_THINKING === 'true', harnessModel: env.DEEPSEEK_HARNESS_MODEL || DEEPSEEK_DEFAULTS.harnessModel, harnessAuth: env.DEEPSEEK_HARNESS_AUTH || DEEPSEEK_DEFAULTS.harnessAuth },
     qq: { url: env.ONEBOT_WS_URL || 'ws://127.0.0.1:3001' },
+    speech: { ...SPEECH_DEFAULTS },
     school: { enabled: !!env.OWNER_QQ, pollSeconds: Number(env.POLL_SECONDS || 900), reminders: true },
     github: { enabled: true, authMode: 'existing', defaultRepo: '' },
     drive: { enabled: true, accessMode: 'read', authMode: 'existing', clientId: '', rootFolderId: '' },
@@ -67,6 +73,7 @@ export function validateSettings(input) {
     for (const [field, validate] of Object.entries(fields)) if (!validate(values[field])) throw new Error(`配置 ${section}.${field} 无效，请检查内容或范围。`);
   }
   if (!Array.isArray(input.groups) || input.groups.length > 200 || input.groups.some(g => !g || Object.keys(g).sort().join() !== 'enabled,historyEnabled,id,name,profileId,template,templatePrompt' || !qq(g.id) || !text(g.name, 80) || !bool(g.enabled) || !bool(g.historyEnabled) || !templateIds.includes(g.template) || !text(g.templatePrompt, 2000) || typeof g.profileId !== 'string' || !(g.profileId === '' || input.profiles.some(p => p.id === g.profileId))) || new Set(input.groups.map(g => g.id)).size !== input.groups.length) throw new Error('群号、场景模板或群提示词无效，群号必须唯一且方案必须存在，最多 200 个群。');
+  if (input.speech.enabled && input.speech.model === 'mimo-v2.5-tts-voicedesign' && !input.speech.voiceDescription.trim()) throw new Error('请填写音色描述，再启用文字设计音色。');
   return structuredClone(input);
 }
 
@@ -108,5 +115,7 @@ export class SettingsStore {
 export function modelEnv(settings, secrets = {}, base = process.env) {
   return { ...base, BOT_NAME: settings.bot.name, BOT_SYSTEM_PROMPT: settings.bot.systemPrompt, AI_BACKEND: settings.ai.backend,
     CODEX_MODEL: settings.ai.model, OPENAI_MODEL: settings.ai.apiModel, OPENAI_BASE_URL: settings.ai.baseURL,
-    OPENAI_API_KEY: secrets.openaiKey || '', GH_TOKEN: secrets.githubToken || '' };
+    OPENAI_API_KEY: secrets.openaiKey || '', GH_TOKEN: secrets.githubToken || '', DEEPSEEK_API_KEY: secrets.deepseekKey || '',
+    DEEPSEEK_MODEL: settings.ai.deepseekModel, DEEPSEEK_THINKING: String(settings.ai.deepseekThinking),
+    DEEPSEEK_HARNESS_MODEL: settings.ai.harnessModel, DEEPSEEK_HARNESS_AUTH: settings.ai.harnessAuth };
 }

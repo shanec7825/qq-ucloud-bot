@@ -3,6 +3,7 @@ import { SettingsStore } from './settings.mjs';
 import { SecretVault } from './secret-vault.mjs';
 import { BotRuntime } from './runtime.mjs';
 import { startAdmin } from './admin-server.mjs';
+import { selectedModel } from './ai-providers.mjs';
 
 async function main() {
   if (process.argv.includes('--demo')) {
@@ -21,7 +22,7 @@ async function main() {
   const stop = async () => { if (stopped) return; stopped = true; runtime.stop(); await admin.close(); };
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, stop);
   const settings = store.get();
-  console.log(`${settings.bot.name} 已启动；群里必须 @，模型：${settings.ai.backend === 'codex' ? settings.ai.model : settings.ai.apiModel || '待配置'}。`);
+  console.log(`${settings.bot.name} 已启动；群里必须 @，模型：${selectedModel(settings) || '待配置'}。`);
   const ui = await readJSON(new URL('../data/napcat-ui.json', import.meta.url), null);
   console.log(`配置入口：${ui?.origin ? ui.origin + '/webui/plugins' : admin.origin}；运行 npm run admin:open 打开。`);
 }

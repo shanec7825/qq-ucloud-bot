@@ -26,7 +26,7 @@ for (const id of ['napcat-plugin-slyra', 'napcat-plugin-slyra-monitor']) {
 const template = JSON.parse(await readFile(join(projectRoot, 'napcat-plugin/package.json'), 'utf8'));
 for (const plugin of PLUGIN_MODULES) {
   const target = join(pluginsRoot, plugin.id); await mkdir(target, { recursive: true });
-  for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs', 'native-config.mjs']) await copyFile(join(projectRoot, 'napcat-plugin', name), join(target, name));
+  for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs', 'native-config.mjs', 'speech-config.mjs']) await copyFile(join(projectRoot, 'napcat-plugin', name), join(target, name));
   await mkdir(join(target, 'webui'), { recursive: true });
   for (const name of ['index.html', 'app.js', 'style.css', 'copy.mjs', 'THIRD-PARTY.txt']) await copyFile(join(projectRoot, 'napcat-plugin/webui', name), join(target, 'webui', name));
   await writeFile(join(target, 'package.json'), JSON.stringify({ ...template, name: plugin.id, plugin: plugin.name, description: plugin.description }, null, 2));

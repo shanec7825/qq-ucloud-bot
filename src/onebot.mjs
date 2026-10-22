@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { parseJSON } from './core.mjs';
 import { qqPlainText } from './qq-output.mjs';
 import { mediaURL } from './message-media.mjs';
+import { decodeBase64, imageType } from './outgoing-media.mjs';
+import { validateWav } from './xiaomi-speech.mjs';
 
 export class OneBot {
   constructor(address, token, onEvent) {
@@ -35,11 +37,11 @@ export class OneBot {
       if (!this.stopped) { console.error('QQ 连接断开，5 秒后重连。'); this.retry = setTimeout(() => this.connect(), 5000); }
     });
   }
-  call(action, params) {
+  call(action, params, { timeoutMs = 15000 } = {}) {
     return new Promise((resolve, reject) => {
       if (this.socket?.readyState !== WebSocket.OPEN) return reject(new Error('QQ 尚未连接。'));
       const echo = randomUUID();
-      const timer = setTimeout(() => { this.pending.delete(echo); reject(new Error('QQ API 响应超时；下次轮询可能重试。')); }, 15000);
+      const timer = setTimeout(() => { this.pending.delete(echo); reject(new Error('QQ API 响应超时，请检查消息是否已发出后再重试。')); }, timeoutMs);
       this.pending.set(echo, { resolve, reject, timer });
       this.socket.send(JSON.stringify({ action, params, echo }));
     });
@@ -60,15 +62,31 @@ export class OneBot {
     }
     return sent;
   }
-  async sendSegments(target, parts) {
+  async sendSegments(target, parts, { replyTo, mention } = {}) {
     if (!Array.isArray(parts) || !parts.length || parts.length > 8) throw new Error('消息段数量无效。');
     const message = parts.map(part => {
       if (part.type === 'text') return { type: 'text', data: { text: qqPlainText(part.data?.text).slice(0, 1800) } };
       if (part.type === 'face' && /^\d{1,4}$/.test(String(part.data?.id))) return { type: 'face', data: { id: String(part.data.id) } };
-      if (part.type === 'image') return { type: 'image', data: { file: mediaURL(part.data?.file).href } };
+      if (part.type === 'image') {
+        const file = String(part.data?.file || '');
+        if (file.startsWith('base64://')) imageType(decodeBase64(file.slice(9)));
+        else mediaURL(file);
+        return { type: 'image', data: { file, sub_type: part.data?.sub_type === 1 ? 1 : 0, summary: String(part.data?.summary || '').slice(0, 60) } };
+      }
+      if (part.type === 'record') {
+        const file = String(part.data?.file || '');
+        if (!file.startsWith('base64://')) throw new Error('语音只允许发送已生成的 WAV 数据。');
+        validateWav(decodeBase64(file.slice(9), 16 * 1024 * 1024));
+        return { type: 'record', data: { file } };
+      }
       throw new Error('不支持或不安全的消息段。');
     });
-    return this.call(target.group_id ? 'send_group_msg' : 'send_private_msg', { ...target, message });
+    if (message.some(part => part.type === 'record') && message.length !== 1) throw new Error('QQ 语音须作为单独消息发送。');
+    if (target.group_id && message[0].type !== 'record') {
+      if (/^\d{5,15}$/.test(String(mention))) message.unshift({ type: 'at', data: { qq: String(mention) } });
+      if (/^-?\d{1,30}$/.test(String(replyTo))) message.unshift({ type: 'reply', data: { id: String(replyTo) } });
+    }
+    return this.call(target.group_id ? 'send_group_msg' : 'send_private_msg', { ...target, message }, { timeoutMs: 60000 });
   }
   close() { this.stopped = true; clearTimeout(this.retry); this.socket?.close(); }
 }

@@ -1,6 +1,7 @@
 import { incomingText } from './persona.mjs';
 import { replyTarget } from './access.mjs';
 import { routeNatural } from './natural-chat.mjs';
+import { deliverReply } from './reply-delivery.mjs';
 
 export function createMessageHandler({ bot, groups, memory, getDependencies, ...deps }) {
   const queues = new Map(), seen = new Set();
@@ -41,8 +42,9 @@ export function createMessageHandler({ bot, groups, memory, getDependencies, ...
           error instanceof TypeError || error.name === 'TimeoutError' ? '网络请求失败或超时，请检查服务连接。' : error.message;
       }
       if (current().enabled === false || !incomingText(event, current().groups) || active.owner !== current().owner || active.transportVersion !== current().transportVersion || active.capabilities !== current().capabilities) return;
-      const sent = await bot.send(target, response, event.message_type === 'group' ? { replyTo: event.message_id, mention: event.user_id } : undefined);
-      if (memory.version === memoryVersion) memory.add({ ...event, message_id: sent?.[0]?.message_id ?? '', inReplyTo: event.message_id, message: [], time: Date.now() / 1000 }, response, true);
+      const options = event.message_type === 'group' ? { replyTo: event.message_id, mention: event.user_id } : undefined;
+      const delivery = await deliverReply(response, { bot, target, options, isCurrent: () => current().enabled !== false && !!incomingText(event, current().groups) && active.owner === current().owner && active.capabilities === current().capabilities && active.transportVersion === current().transportVersion });
+      if (memory.version === memoryVersion) memory.add({ ...event, message_id: delivery.sent[0]?.message_id ?? '', inReplyTo: event.message_id, message: [], time: Date.now() / 1000 }, delivery.summary, true);
     });
     const entry = { promise: work, count: (previous?.count || 0) + 1 };
     queues.set(conversation, entry);

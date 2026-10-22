@@ -9,7 +9,8 @@ if (paths.some(path => path.startsWith('data/') || path.startsWith('tools/') || 
 const markers = new Set(); const collect = value => { if (typeof value === 'string' && value.length >= 12) markers.add(value); else if (value && typeof value === 'object') Object.values(value).forEach(collect); };
 try {
   process.loadEnvFile(join(root, '.env')); const vault = new SecretVault(); await vault.load();
-  for (const name of ['onebotToken', 'openaiKey', 'githubToken', 'googleClientSecret', 'googleTokens']) collect(vault.get(name));
+  for (const name of ['onebotToken', 'openaiKey', 'deepseekKey', 'mimoKey', 'githubToken', 'googleClientSecret', 'googleTokens']) collect(vault.get(name));
+  for (const account of JSON.parse(await readFile(join(root, 'data/settings.json'), 'utf8')).accounts || []) if (account.id !== 'default') collect(vault.get('onebotToken:' + account.id));
 } catch (error) { if (error.code !== 'ENOENT') throw new Error('无法完成本机授权指纹检查，未通过发行审核。'); }
 for (const marker of markers) {
   const needle = Buffer.from(marker), wide = Buffer.from(marker, 'utf16le');

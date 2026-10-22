@@ -3,7 +3,7 @@ import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { readJSON, saveJSON } from './core.mjs';
 import { protectSchoolSecret, unprotectSchoolSecret } from './school-secret.mjs';
 
-const keys = ['onebotToken', 'openaiKey', 'githubToken', 'googleClientSecret', 'googleTokens'];
+const keys = ['onebotToken', 'openaiKey', 'deepseekKey', 'mimoKey', 'githubToken', 'googleClientSecret', 'googleTokens'];
 const knownKey = key => keys.includes(key) || /^onebotToken:[A-Za-z0-9_-]{1,40}$/.test(key);
 export class SecretVault {
   constructor(root = new URL('../data/', import.meta.url), env = process.env, codec) {
@@ -25,7 +25,7 @@ export class SecretVault {
   get(key) {
     if (!knownKey(key)) throw new Error('未知密钥字段。');
     if (Object.hasOwn(this.values, key)) return this.values[key];
-    return ({ onebotToken: this.env.ONEBOT_ACCESS_TOKEN, openaiKey: this.env.OPENAI_API_KEY, githubToken: this.env.GH_TOKEN })[key] || null;
+    return ({ onebotToken: this.env.ONEBOT_ACCESS_TOKEN, openaiKey: this.env.OPENAI_API_KEY, deepseekKey: this.env.DEEPSEEK_API_KEY, mimoKey: this.env.MIMO_API_KEY, githubToken: this.env.GH_TOKEN })[key] || null;
   }
   flags() { return Object.fromEntries([...new Set([...keys, ...Object.keys(this.values).filter(knownKey)])].map(key => [key, !!this.get(key)])); }
   set(patch) {
