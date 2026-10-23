@@ -72,7 +72,8 @@ export async function prepareHarnessRun(env = process.env) {
   } catch (error) { await cleanup(); throw error; }
 }
 
-export async function askHarness(question, context, env = process.env, { spawner = spawn, prepare = prepareHarnessRun, timeoutMs = 180000 } = {}) {
+export async function askHarness(question, context, env = process.env, { spawner = spawn, prepare = prepareHarnessRun, timeoutMs = 180000, signal } = {}) {
+  signal?.throwIfAborted();
   const input = await prepareModelContent(question, context);
   const blocks = typeof input === 'string' ? [{ type: 'text', text: input }] : input.map(part => {
     if (part.type === 'text') return part;
@@ -81,6 +82,7 @@ export async function askHarness(question, context, env = process.env, { spawner
   });
   const rules = await readFile(new URL('./qq-model-instructions.md', import.meta.url), 'utf8');
   const run = await prepare(env);
+  if (signal?.aborted) { await run.cleanup(); signal.throwIfAborted(); }
   run.env.DSH_SYSTEM_PROMPT = rules + '\n管理员设定：\n' + (env.BOT_SYSTEM_PROMPT || '') + '\n机器人名字：' + (env.BOT_NAME || 'slyra') + '\n' + GROUP_CHAT_PROMPT + templateSystemPrompt(context) + taskSystemPrompt(context);
   return new Promise((resolve, reject) => {
     let child, settled = false, buffer = '', size = 0, sequence = 0, answer = '', completed = false;
@@ -88,12 +90,15 @@ export async function askHarness(question, context, env = process.env, { spawner
     const cleanup = () => run.cleanup().catch(() => console.error('Harness 临时会话清理失败，请检查 data/harness-runtime。'));
     const finish = error => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
+      settled = true; clearTimeout(timer); signal?.removeEventListener('abort', abort);
       for (const entry of pending.values()) entry.reject(unavailable()); pending.clear();
       error ? reject(error) : resolve(answer);
       if (child) child.kill(); else void cleanup();
     };
     const timer = setTimeout(() => finish(new Error('DeepSeek Harness 请求超时，请检查网络或稍后重试。')), timeoutMs);
+    const abort = () => finish(signal.reason);
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { abort(); return; }
     const rpc = (method, params) => new Promise((resolve, reject) => {
       if (settled) { reject(unavailable()); return; }
       const id = ++sequence; pending.set(id, { resolve, reject });

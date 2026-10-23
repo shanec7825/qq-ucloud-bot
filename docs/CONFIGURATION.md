@@ -1,4 +1,4 @@
-# QQ Agent 配置手册
+# Qlyra 配置手册
 
 **Last Updated:** 2026-10-21 · 2.0.0 本地候选版
 

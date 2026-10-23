@@ -14,14 +14,16 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-[assembly: AssemblyTitle("QQ Agent")]
-[assembly: AssemblyDescription("QQ Agent Windows desktop launcher")]
-[assembly: AssemblyVersion("2.2.0.0")]
-[assembly: AssemblyFileVersion("2.2.0.0")]
+[assembly: AssemblyTitle("Qlyra")]
+[assembly: AssemblyProduct("Qlyra")]
+[assembly: AssemblyDescription("Qlyra Windows desktop AI companion for QQ")]
+[assembly: AssemblyVersion("2.6.1.0")]
+[assembly: AssemblyFileVersion("2.6.1.0")]
 
 namespace QQAgentDesktop {
     internal static class Program {
         internal static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = 2000000 };
+        // Preserve the existing profile and workspace location across the Qlyra rename.
         internal static readonly string AppData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "QQAgent");
         internal static readonly string InstallDirectory = AppDomain.CurrentDomain.BaseDirectory;
         internal static string Argument(string[] args, string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
@@ -32,7 +34,7 @@ namespace QQAgentDesktop {
                 if (!created) { try { EventWaitHandle.OpenExisting("Local\\QQAgentDesktopShow").Set(); } catch { } return; }
                 Directory.CreateDirectory(AppData);
                 try { Application.Run(new MainWindow(args, smoke)); }
-                catch (Exception error) { MessageBox.Show("桌面程序未能打开：" + error.Message + "\n请检查 WebView2 Runtime，或查看 README 的恢复入口。", "QQ Agent", MessageBoxButtons.OK, MessageBoxIcon.Error); Environment.ExitCode = 1; }
+                catch (Exception error) { MessageBox.Show("桌面程序未能打开：" + error.Message + "\n请检查 WebView2 Runtime，或查看 README 的恢复入口。", "Qlyra", MessageBoxButtons.OK, MessageBoxIcon.Error); Environment.ExitCode = 1; }
             }
         }
     }
@@ -55,7 +57,7 @@ namespace QQAgentDesktop {
         const string LocalOrigin = "http://127.0.0.1:6099";
 
         public MainWindow(string[] args, bool test) {
-            smoke = test; arguments = args; Text = "QQ Agent"; Width = 1180; Height = 840; MinimumSize = new Size(900, 640);
+            smoke = test; arguments = args; Text = "Qlyra"; Width = 1180; Height = 840; MinimumSize = new Size(900, 640);
             StartPosition = FormStartPosition.CenterScreen; Font = new Font("Microsoft YaHei UI", 9F); BackColor = Color.FromArgb(244, 246, 248);
             AutoScaleMode = AutoScaleMode.Dpi; Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             if (smoke) { Opacity = 0; ShowInTaskbar = false; }
@@ -77,7 +79,7 @@ namespace QQAgentDesktop {
             AddAction(management.DropDownItems, "打开数据目录", delegate { OpenFolder(Path.Combine(workspace, "data")); return Task.FromResult(0); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("退出桌面程序（后台继续运行）", null, delegate { quitting = true; Close(); });
-            tray.Icon = Icon; tray.Text = "QQ Agent · 双击打开"; tray.ContextMenuStrip = menu; tray.Visible = true; tray.DoubleClick += delegate { RestoreWindow(); };
+            tray.Icon = Icon; tray.Text = "Qlyra · 双击打开"; tray.ContextMenuStrip = menu; tray.Visible = true; tray.DoubleClick += delegate { RestoreWindow(); };
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (!quitting && !smoke && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; HideToTray(); } };
             FormClosed += delegate { refresh.Stop(); tray.Dispose(); if (showEvent != null) showEvent.Dispose(); };
             Shown += async delegate { await Initialize(); };
@@ -90,7 +92,7 @@ namespace QQAgentDesktop {
         async Task RunSafely(Func<Task> action) {
             if (busy) return; busy = true; navigationGeneration++; actions.ForEach(button => button.Enabled = false);
             try { await action(); }
-            catch (Exception error) { progress.Text = error.Message; if (!smoke) MessageBox.Show(error.Message, "QQ Agent", MessageBoxButtons.OK, MessageBoxIcon.Information); else throw; }
+            catch (Exception error) { progress.Text = error.Message; if (!smoke) MessageBox.Show(error.Message, "Qlyra", MessageBoxButtons.OK, MessageBoxIcon.Information); else throw; }
             finally { busy = false; actions.ForEach(button => button.Enabled = true); }
         }
         static bool IsProject(string folder) { return !String.IsNullOrEmpty(folder) && File.Exists(Path.Combine(folder, "scripts", "desktop-service.mjs")) && File.Exists(Path.Combine(folder, "src", "main.mjs")); }
@@ -128,7 +130,8 @@ namespace QQAgentDesktop {
                     await RunSafely(async delegate {
                         if (action == "login") await OpenPage("/webui/qq_login"); else if (action == "settings") await OpenPage("/webui/plugins"); else if (action == "workspace") await SelectWorkspace();
                         else if (action == "switch") await SwitchAccount(); else if (action == "data") OpenFolder(Path.Combine(workspace, "data")); else if (action == "home") await NavigateHome();
-                        else if (action == "open-webui") await OpenPage("/webui/"); else if (action == "setup") await SetupAll(); else if (new[] { "start", "install", "stop-bot" }.Contains(action)) await Operate(action);
+                        else if (action == "open-webui") await OpenPage("/webui/"); else if (action == "setup") await SetupAll();
+                        else if (action == "stop-conflict") await StopConflict(); else if (action == "trim-ports") await Operate("trim-ports"); else if (new[] { "start", "install", "stop-bot" }.Contains(action)) await Operate(action);
                     });
                 };
                 browser.CoreWebView2.NavigationCompleted += async delegate { if (home && browser.Source != null && browser.Source.Host == "qq-agent.local") await RefreshStatus(); };
@@ -136,7 +139,7 @@ namespace QQAgentDesktop {
                 if (smoke) await SmokeTest();
             } catch (Exception error) {
                 if (smoke) { WriteSmoke(false, error.Message); quitting = true; Close(); }
-                else { progress.Text = error.Message; MessageBox.Show("打开失败：" + error.Message + "\nWebView2 Runtime 下载：https://developer.microsoft.com/microsoft-edge/webview2/", "QQ Agent"); }
+                else { progress.Text = error.Message; MessageBox.Show("打开失败：" + error.Message + "\nWebView2 Runtime 下载：https://developer.microsoft.com/microsoft-edge/webview2/", "Qlyra"); }
             }
         }
         void ExtractWorkspace() {
@@ -175,7 +178,7 @@ namespace QQAgentDesktop {
             File.WriteAllText(Path.Combine(workspace, ".qq-agent-managed"), Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
         }
         void SaveWorkspace() { if (!smoke) File.WriteAllText(Path.Combine(Program.AppData, "desktop.json"), Program.Json.Serialize(new { workspace = workspace })); }
-        async Task SelectWorkspace() { using (var dialog = new FolderBrowserDialog { Description = "选择现有 QQ Agent 项目目录，配置和授权会继续使用", SelectedPath = workspace }) {
+        async Task SelectWorkspace() { using (var dialog = new FolderBrowserDialog { Description = "选择现有 Qlyra / QQ Agent 项目目录，配置和授权会继续使用", SelectedPath = workspace }) {
             if (dialog.ShowDialog(this) == DialogResult.OK) { if (!IsProject(dialog.SelectedPath)) throw new Exception("此目录未找到桌面支持脚本，请先更新项目，或使用安装包默认工作区。"); workspace = dialog.SelectedPath; SaveWorkspace(); await NavigateHome(); }
         } }
         async Task NavigateHome() {
@@ -185,7 +188,7 @@ namespace QQAgentDesktop {
             if (GetBool(status, "webuiAvailable")) { await OpenPageCore("/webui/", generation, folder); return; }
             home = true; progress.Visible = true; browser.CoreWebView2.Navigate(HomeURL);
         }
-        async Task Operate(string action, bool navigate = true) { progress.Text = action == "install" ? "准备组件中，首次下载可能需要几分钟…" : action == "stop-bot" ? "正在停止机器人…" : "正在启动并复用本机后台…"; await Service(action, action == "install" ? 600000 : 150000); if (navigate) await NavigateHome(); }
+        async Task Operate(string action, bool navigate = true) { progress.Text = action == "install" ? "准备组件中，首次下载可能需要几分钟…" : action == "stop-bot" ? "正在停止机器人…" : action == "stop-conflict" ? "正在退出其它工作区的 NapCat 后台…" : action == "trim-ports" ? "正在整理本机端口占用…" : "正在启动并复用本机后台…"; await Service(action, action == "install" ? 600000 : 150000); if (navigate) await NavigateHome(); }
         async Task SetupAll() {
             Exception failure = null;
             try { await Operate("install", false); await Operate("start", false); }
@@ -193,6 +196,10 @@ namespace QQAgentDesktop {
             await SendProgressDone("setup", failure == null, failure == null ? null : failure.Message);
             if (failure != null) throw failure;
             await NavigateHome();
+        }
+        async Task StopConflict() {
+            if (MessageBox.Show(this, "将退出其它工作区的 NapCat 后台以释放被占端口。其它后台里的 QQ 连接会断开,配置不受影响。现在继续?", "释放被占端口", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) { await SendProgressDone("stop-conflict", false, "已取消"); return; }
+            await Operate("stop-conflict");
         }
         async Task OpenPage(string path) {
             await OpenPageCore(path, ++navigationGeneration, workspace);
@@ -217,7 +224,7 @@ namespace QQAgentDesktop {
             } finally { navigationLock.Release(); }
         }
         async Task SwitchAccount() {
-            if (MessageBox.Show(this, "将断开当前机器人 QQ，重新显示登录入口。\n机器人设置、模型和其他服务授权会保留。\n\n现在切换 QQ？", "切换 QQ", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+            if (MessageBox.Show(this, "将断开当前机器人 QQ，重新显示登录入口。\n机器人设置、模型和其他服务授权会保留。\n\n现在切换 QQ？", "切换 QQ", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) { await SendProgressDone("switch", false, "已取消"); return; }
             progress.Text = "正在切换 QQ，请等待新的登录页面…"; await Service("switch-account", 150000); await OpenPage("/webui/qq_login");
         }
         async Task RefreshStatus() {
@@ -244,7 +251,7 @@ namespace QQAgentDesktop {
             Exception failure = null; Dictionary<string, object> result = null;
             try {
                 string node = Path.Combine(Program.InstallDirectory, "runtime", "node.exe"), script = Path.Combine(workspace, "scripts", "desktop-service.mjs");
-                if (!File.Exists(node) || !File.Exists(script)) throw new Exception("运行文件不完整，请重新安装 QQ Agent，或选择已更新的项目。");
+                if (!File.Exists(node) || !File.Exists(script)) throw new Exception("运行文件不完整，请重新安装 Qlyra，或选择已更新的项目。");
                 using (var process = new Process { StartInfo = new ProcessStartInfo(node, Quote(script) + " " + Quote(action) + " " + Quote(workspace)) { WorkingDirectory = workspace, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 } }) {
                     process.Start(); var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = PumpProgress(process);
                     bool exited = await Task.Run(delegate { return process.WaitForExit(timeout); });

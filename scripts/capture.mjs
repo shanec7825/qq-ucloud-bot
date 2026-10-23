@@ -1,4 +1,4 @@
-import { saveJSON } from '../src/core.mjs';
+import { saveSchoolSession } from '../src/core.mjs';
 import { sessionFromRequest, successfulSchoolResponse } from '../src/capture-session.mjs';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
@@ -46,7 +46,7 @@ async function main() {
       captured = true;
       const response = await request.response();
       if (!response || !successfulSchoolResponse(response.status(), await response.json())) { captured = false; return; }
-      await saveJSON(new URL('../data/session.json', import.meta.url), { ...session, capturedAt: new Date().toISOString() });
+      await saveSchoolSession(new URL('../data/session.json', import.meta.url), { ...session, capturedAt: new Date().toISOString() });
       console.log('学校接口已验证成功，登录态已保存。接下来运行 npm run check 同步最近截止作业。');
       resolveCapture(true);
     } catch { captured = false; console.error('该请求未能完成验证或保存；窗口继续等待，可刷新学校首页重试。'); }

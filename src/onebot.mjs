@@ -1,37 +1,40 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { parseJSON } from './core.mjs';
 import { qqPlainText } from './qq-output.mjs';
 import { mediaURL } from './message-media.mjs';
 import { decodeBase64, imageType } from './outgoing-media.mjs';
 import { validateWav } from './xiaomi-speech.mjs';
+import { reportDeliveryIssue } from './delivery-issues.mjs';
 
 export class OneBot {
-  constructor(address, token, onEvent) {
+  constructor(address, token, onEvent, { onConnect = () => {} } = {}) {
     const url = new URL(address);
     if (!['ws:', 'wss:'].includes(url.protocol)) throw new Error('ONEBOT_WS_URL 必须为 ws/wss 地址。');
     if (url.protocol === 'ws:' && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) throw new Error('远程 OneBot 连接请使用 wss。');
     if (token) url.searchParams.set('access_token', token);
-    this.url = url; this.onEvent = onEvent; this.pending = new Map(); this.stopped = false;
+    this.url = url; this.onEvent = onEvent; this.onConnect = onConnect; this.pending = new Map(); this.stopped = false;
   }
   connect() {
     if (this.stopped) return;
     const socket = this.socket = new WebSocket(this.url);
     const timeout = setTimeout(() => socket.close(), 15000);
-    socket.addEventListener('open', () => { clearTimeout(timeout); console.log('QQ 协议端已连接。'); });
-    socket.addEventListener('error', () => console.error('QQ 连接错误，请检查 NapCat 和 token。'));
+    socket.addEventListener('open', () => { clearTimeout(timeout); if (this.stopped || this.socket !== socket) return; this.onConnect(); console.log('QQ 协议端已连接。'); });
+    socket.addEventListener('error', () => { if (!this.stopped && this.socket === socket) console.error('QQ 连接错误，请检查 NapCat 和 token。'); });
     socket.addEventListener('message', async event => {
+      if (this.stopped || this.socket !== socket) return;
       try {
         const data = parseJSON(String(event.data));
         if (data.echo && this.pending.has(data.echo)) {
           const pending = this.pending.get(data.echo);
           this.pending.delete(data.echo); clearTimeout(pending.timer);
           if (data.status === 'ok' && Number(data.retcode) === 0) pending.resolve(data.data);
-          else pending.reject(new Error(`QQ API 失败，retcode=${data.retcode}`));
+          else pending.reject(Object.assign(new Error(`QQ API 请求未完成，retcode=${Number(data.retcode)}`), { code: 'QQ_API_FAILED', retcode: Number(data.retcode), deliveryUnknown: /timeout|超时|timed.?out|onMsgInfoListUpdate/iu.test(String(data.message || '') + ' ' + String(data.wording || '')) }));
         } else if (data.post_type) await this.onEvent(data);
       } catch { console.error('QQ 事件处理失败。'); }
     });
     socket.addEventListener('close', () => {
       clearTimeout(timeout);
+      if (this.socket !== socket) return;
       for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('QQ 连接断开。')); }
       this.pending.clear();
       if (!this.stopped) { console.error('QQ 连接断开，5 秒后重连。'); this.retry = setTimeout(() => this.connect(), 5000); }
@@ -41,7 +44,7 @@ export class OneBot {
     return new Promise((resolve, reject) => {
       if (this.socket?.readyState !== WebSocket.OPEN) return reject(new Error('QQ 尚未连接。'));
       const echo = randomUUID();
-      const timer = setTimeout(() => { this.pending.delete(echo); reject(new Error('QQ API 响应超时，请检查消息是否已发出后再重试。')); }, timeoutMs);
+      const timer = setTimeout(() => { this.pending.delete(echo); reject(Object.assign(new Error('QQ API 响应超时。'), { code: 'QQ_API_TIMEOUT', deliveryUnknown: true })); }, timeoutMs);
       this.pending.set(echo, { resolve, reject, timer });
       this.socket.send(JSON.stringify({ action, params, echo }));
     });
@@ -86,7 +89,33 @@ export class OneBot {
       if (/^\d{5,15}$/.test(String(mention))) message.unshift({ type: 'at', data: { qq: String(mention) } });
       if (/^-?\d{1,30}$/.test(String(replyTo))) message.unshift({ type: 'reply', data: { id: String(replyTo) } });
     }
-    return this.call(target.group_id ? 'send_group_msg' : 'send_private_msg', { ...target, message }, { timeoutMs: 60000 });
+    const image = message.filter(part => part.type === 'image');
+    const localImage = image.length === 1 && message.every(part => ['image','reply','at'].includes(part.type)) && image[0].data.file.startsWith('base64://');
+    const historyAction = target.group_id ? 'get_group_msg_history' : 'get_friend_msg_history';
+    const historyParams = { ...(target.group_id ? { group_id: target.group_id } : { user_id: target.user_id }), count: 12 };
+    let snapshot, self;
+    if (localImage) {
+      try {
+        const result = await Promise.all([this.call(historyAction, historyParams), this.call('get_login_info', {})]);
+        snapshot = new Set((result[0]?.messages || []).map(row => String(row.message_id)));
+        self = String(result[1]?.user_id || '');
+      } catch { /* History is optional; inability to verify never triggers a retry. */ }
+    }
+    const started = Math.floor(Date.now() / 1000);
+    try { return await this.call(target.group_id ? 'send_group_msg' : 'send_private_msg', { ...target, message }, { timeoutMs: 60000 }); }
+    catch (error) {
+      // QQ can store an image while its kernel callback times out. Recover only
+      // a new, own-sender receipt with matching bytes; never resend on timeout.
+      if (error.deliveryUnknown && localImage && snapshot && /^\d{5,15}$/.test(self)) {
+        const digest = createHash('md5').update(decodeBase64(image[0].data.file.slice(9))).digest('hex');
+        try {
+          const history = await this.call(historyAction, historyParams);
+          const matches = (history.messages || []).filter(row => row.message_id != null && !snapshot.has(String(row.message_id)) && String(row.user_id ?? row.sender?.user_id) === self && Number(row.time) >= started && Array.isArray(row.message) && row.message.some(part => part.type === 'image' && [part.data?.md5, part.data?.file].some(value => typeof value === 'string' && value.toLowerCase().match(/[a-f0-9]{32}/u)?.[0] === digest)));
+          if (matches.length === 1) { reportDeliveryIssue('image_receipt_recovered'); return { message_id: matches[0].message_id }; }
+        } catch { /* Preserve the original uncertain-delivery failure. */ }
+      }
+      throw error;
+    }
   }
   close() { this.stopped = true; clearTimeout(this.retry); this.socket?.close(); }
 }

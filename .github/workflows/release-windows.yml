@@ -83,4 +83,4 @@ jobs:
             exit 1
           fi
           mapfile -d '' ASSETS < <(find artifacts -type f -print0)
-          gh release create "$TAG" "${ASSETS[@]}" --target "$RELEASE_COMMIT" --title "QQ Agent $VERSION for Windows" --notes-file "docs/releases/$TAG.md"
+          gh release create "$TAG" "${ASSETS[@]}" --target "$RELEASE_COMMIT" --title "Qlyra $VERSION for Windows" --notes-file "docs/releases/$TAG.md"

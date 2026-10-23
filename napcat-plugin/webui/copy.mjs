@@ -1,7 +1,8 @@
 // Product vocabulary shared by the native dialog and the extension page.
 export const PAGE_COPY = {
+  chat: { title:'chat', group:'聊天', description:'联系人、角色与自动记忆' },
   media: { title:'图片与表情包', group:'聊天与回复', description:'上传图片和 GIF 表情包，指定可使用的 QQ 账号与会话。' },
-  speech: { title:'语音', group:'聊天与回复', description:'调用小米 MiMo TTS 发送 QQ 原生语音。文字与语音可分别组织内容，像聊天一样互相补充。' },
+  speech: { title:'语音', group:'聊天与回复', description:'设定声音，让每句话都有合适的表达。' },
   bot: { title:'机器人身份', group:'聊天与回复', description:'设置机器人如何自称、如何说话，以及谁能使用私人功能。' },
   profiles: { title:'角色与语气', group:'聊天与回复', description:'保存不同的名字和回答风格，供 QQ 账号、群聊或私聊使用。' },
   bindings: { title:'会话角色分配', group:'聊天与回复', description:'选择机器人 QQ、群聊或好友，再指定由哪个角色回复。', detail:'角色选择顺序：会话指定角色 → QQ 账号默认角色 → 默认 QQ 的群角色 → 机器人基础风格。未指定角色时继续沿用下一层设置。关闭这条分配会停止该会话回复。' },
@@ -68,8 +69,14 @@ const fieldOrder = {
 };
 const optionLabels = { identity:'名字与风格',memories:'角色的长期记忆',edit:'编辑内容',delete:'删除所选内容',clear:'清空所选内容',view:'只查看',status:'更新事项状态',none:'仅保存设置',codex:'ChatGPT 登录',api:'自定义 API 服务',chatgpt:'复用 ChatGPT 连接',existing:'使用本机已有授权',token:'填写 Token',oauth:'使用 Google OAuth 授权','codex/login':'登录 ChatGPT','codex/account':'检查登录状态','google/authorize':'获取 Google 授权链接' };
 
-const shortTitles = {bot:'身份',profiles:'人格',groups:'群聊',bindings:'分配',accounts:'QQ 账号',ai:'模型',agent:'权限',library:'资料库',qq:'默认连接',notes:'长期记忆',memory:'上下文',history:'历史读取',digests:'群摘要',conversations:'对话',github:'GitHub',drive:'Google Drive',school:'教学云',realtime:'即时提醒',monitor:'定时整理',inbox:'待办',reports:'整理记录'};
+const shortTitles = {bot:'默认全局角色',profiles:'角色',groups:'群聊回复',bindings:'会话分配',accounts:'QQ 连接',ai:'回答模型',agent:'管理与权限',library:'资料库',qq:'默认连接',notes:'长期记忆',memory:'上下文',history:'历史读取',digests:'群摘要',conversations:'对话记录',github:'GitHub',drive:'Google Drive',school:'ucloud',realtime:'通知',monitor:'定时整理',inbox:'待办',reports:'整理'};
 for (const [page,title] of Object.entries(shortTitles)) PAGE_COPY[page].title=title;
+Object.assign(PAGE_COPY.realtime, { description:'按群查看重要通知，选择加入待办' });
+Object.assign(PAGE_COPY.monitor, { description:'按模板整理，保存在本地' });
+Object.assign(PAGE_COPY.accounts, { description:'管理 NapCat 连接；聊天设置由所有登录 QQ 共用' });
+Object.assign(PAGE_COPY.profiles, { group:'聊天', description:'默认全局角色与专属角色' });
+Object.assign(PAGE_COPY.groups, { group:'聊天' });
+Object.assign(PAGE_COPY.media, { group:'聊天', description:'可直接使用的图片与表情包' });
 Object.assign(common, {accountId:['QQ 账号',''],profileId:['人格',''],targetId:['聊天对象',''],defaultProfileId:['默认人格',''],onebotToken:['OneBot Token','留空保留'],openaiKey:['API Key','留空保留'],githubToken:['GitHub Token','留空保留'],googleClientSecret:['Client Secret','留空保留'],focus:['关注事项',''],groups:['关注群','支持多选'],recipientQQ:['接收人 QQ',''],text:['记忆内容',''],tags:['标签','逗号分隔']});
 Object.assign(fields.bindings,{kind:['聊天类型',''],targetId:['聊天对象',''],enabled:['允许回复','']});
 Object.assign(fields.groups,{enabled:['允许回复','@ 时回复'],historyEnabled:['读取历史',''],template:['场景',''],templatePrompt:['补充要求','']});
@@ -78,6 +85,10 @@ Object.assign(fields.ai,{deepseekModel:['DeepSeek 模型','默认 deepseek-flash
 common.deepseekKey=['DeepSeek API Key','留空保留已保存的密钥。'];
 common.mimoKey=['MiMo API / Token Plan Key','按量 API 使用 sk- Key；Token Plan 使用 tp- 或 ttp- Key。回答模型与 MiMo TTS 可共用此密钥，留空保留已保存的值。'];
 fields.speech={enabled:['启用语音',''],autoReply:['自动附带语音','开启后文字与语音可分别表达；关闭后仅在请求语音时合成'],autoStyle:['按内容自动调整表达','让当前聊天模型（选择 MiMo 按量 API 或 Token Plan 时即 MiMo Agent）根据本条语音内容生成 MiMo TTS 指令；可调整语气、情绪、语速、停顿、重音、气息和音色质感，同时保持已选音色身份。'],baseURL:['小米服务地址','默认 Token Plan 中国：`https://token-plan-cn.xiaomimimo.com/v1`；也可选择按量 API 或其他 Token Plan 集群。服务地址需与 Key 类型匹配。'],model:['音色方式',''],voice:['音色',''],voiceDescription:['音色描述','每次合成可能有差异；需要声音更一致时可选预置音色'],style:['固定语气与语速要求',''],maxChars:['每条语音最多字数','20–1000 字']};
+fields.speech.referenceAudio=['参考音频','在工作台上传参考音频；保存后用于复刻声音身份。'];
+fields.speech.style=['声音与表达要求','文字设计时描述音色、语速和语气；音频复刻时补充表达要求，保留参考音频的声音身份。'];
+fields.speech.autoStyle=['聊天时微调表达','根据当前对话和本条语音调整情绪、语速、停顿与重音，保持已选声音身份。'];
+fields.speech.autoReply=['按语境决定语音','模型在安慰、问候、情绪表达等适合听的场景选用语音，每轮自动语音最多一条；链接、代码和详细步骤优先文字。说“只发文字”可临时关闭，说“用语音回答”可明确要求。'];
 Object.assign(fields.memory,{enabled:['使用记忆',''],recentLimit:['对话条数','2–40 条'],ttlMinutes:['保留时长（分钟）','1–1440 分钟'],groupContext:['参考群消息',''],groupContextLimit:['群消息条数','2–60 条']});
 Object.assign(fields.history,{enabled:['读取群历史','']});
 Object.assign(fields.library,{root:['资料目录',''],sendToModel:['允许模型读取','']});
@@ -87,19 +98,23 @@ Object.assign(fields.school,{enabled:['连接教学云',''],reminders:['截止�
 Object.assign(fields.realtime,{enabled:['即时提醒',''],debounceSeconds:['合并等待（秒）','1–120 秒']});
 Object.assign(fields.monitor,{enabled:['定时整理',''],intervalMinutes:['整理间隔（分钟）','最少 15 分钟'],lookbackDays:['回看天数','1–30 天'],maxMessages:['最多消息数','20–500 条'],notify:['私聊推送','']});
 Object.assign(fields.agent,{enabled:['允许使用工具','仅管理员私聊'],writes:['允许提出修改','执行前确认'],maxSteps:['最多调用轮数','1–8 轮']});
+Object.assign(common,{profileId:['角色',''],defaultProfileId:['默认角色','']});
+Object.assign(fields.realtime,{includeKeywords:['包含关键词','任意命中；留空不限'],excludeKeywords:['排除关键词','命中任一词即忽略'],senderQQs:['指定发送人 QQ','逗号或换行分隔；留空不限'],minPriority:['推送级别',''],outputFormat:['输出格式',''],focus:['补充筛选要求','']});
+Object.assign(fields.monitor,{template:['整理模板',''],templatePrompt:['模板补充要求',''],outputFormat:['输出格式',''],focus:['重点提取','']});
 Object.assign(optionLabels,{codex:'ChatGPT',api:'API',chatgpt:'ChatGPT 连接',existing:'本机授权',oauth:'OAuth 授权',token:'Token',none:'仅保存',edit:'编辑',delete:'删除',clear:'清空',view:'查看',status:'修改状态'});
-Object.assign(optionLabels,{deepseek:'DeepSeek API','deepseek-harness':'DeepSeek Harness','mimo-api':'MiMo API（按量计费）','mimo-token-plan-cn':'MiMo Token Plan（中国集群）','api-key':'使用 API Key',account:'Harness 已有账号登录'});
+Object.assign(optionLabels,{deepseek:'DeepSeek API','deepseek-harness':'DeepSeek Harness','mimo-api':'MiMo API（按量计费）','mimo-token-plan-cn':'MiMo Token Plan（中国集群）','api-key':'使用 API Key',account:'Harness 已有账号登录','mimo-v2.5-tts':'预置音色','mimo-v2.5-tts-voicedesign':'文字设计音色','mimo-v2.5-tts-voiceclone':'上传音频复刻'});
 
 export const ADVANCED_FIELDS = {groups:['template','templatePrompt','historyEnabled'],notes:['kind','tags'],memory:['recentLimit','ttlMinutes','groupContextLimit'],drive:['rootFolderId'],school:['pollSeconds'],realtime:['debounceSeconds'],monitor:['intervalMinutes','lookbackDays','maxMessages'],agent:['maxSteps']};
 export const FIELD_SECTIONS = {
-  speech:[['连接',['enabled','baseURL','mimoKey']],['声音',['model','voice','voiceDescription','style','autoStyle']],['回复方式',['autoReply','maxChars']]],
-  bot:[['身份',['name','systemPrompt']],['管理',['ownerQQ']]],
+  speech:[['连接',['enabled','baseURL','mimoKey']],['声音',['model','voice','voiceDescription','referenceAudio','style','autoStyle']],['回复方式',['autoReply','maxChars']]],
+  bot:[['默认全局角色',['name','systemPrompt']],['管理',['ownerQQ']]],
   accounts:[['账号',['name','enabled']],['连接',['url','onebotToken']],['回复',['defaultProfileId']]],
   groups:[['群聊',['id','name','enabled']],['回复',['profileId']]],
   bindings:[['聊天',['accountId','kind','targetId']],['回复',['profileId','enabled']]],
   notes:[['范围',['note_account','note_profile','note_kind','targetId']],['内容',['text','enabled']]],
-  realtime:[['接收',['enabled','accountId','groups']],['提醒',['recipientQQ','focus']]],
-  monitor:[['整理',['enabled','groups','focus']],['推送',['notify','recipientQQ']]],
+  realtime:[['来源',['enabled','accountId','groups']],['筛选',['includeKeywords','excludeKeywords','senderQQs','minPriority','focus']],['推送',['recipientQQ','outputFormat']]],
+  monitor:[['来源',['enabled','groups']],['整理',['template','templatePrompt','focus']],['推送',['notify','recipientQQ','outputFormat']]],
+  agent:[['管理员',['ownerQQ']],['工具权限',['enabled','writes']]],
   school:[['连接',['enabled','username','password']],['提醒',['reminders']]],
   drive:[['连接',['enabled','authMode','accessMode','clientId','googleClientSecret']]],
   github:[['连接',['enabled','authMode','githubToken','defaultRepo']]],
@@ -112,17 +127,25 @@ export function shapeSchema(schema,page,config={},state={}) {
   let result=schema.filter(f=>{
     if(f.key==='help')return false;
     const name=f.key.split('__').at(-1);
+    if(page==='speech' && name==='directiveVersion')return false;
+    if(page==='realtime' && ['accountId','recipientQQ','minPriority'].includes(name))return false;
+    if(page==='monitor' && ['notify','recipientQQ'].includes(name))return false;
     if(page==='ai') {
       const fields={codex:['model'],api:['baseURL','apiModel','openaiKey'],'mimo-api':['mimoModel','mimoKey'],'mimo-token-plan-cn':['mimoModel','mimoKey'],deepseek:['deepseekModel','deepseekThinking','deepseekKey'],'deepseek-harness':['harnessModel','harnessAuth',...(harnessAuth==='account'?[]:['deepseekKey'])]};
       if(['model','baseURL','apiModel','openaiKey','mimoModel','mimoKey','deepseekModel','deepseekThinking','deepseekKey','harnessModel','harnessAuth'].includes(name) && !(fields[backend]||[]).includes(name))return false;
     }
     if(page==='drive' && auth!=='oauth' && ['clientId','googleClientSecret','accessMode'].includes(name))return false;
     if(page==='github' && auth!=='token' && name==='githubToken')return false;
-    if(page==='speech' && (name==='voice' && value('model')==='mimo-v2.5-tts-voicedesign' || name==='voiceDescription' && value('model')!=='mimo-v2.5-tts-voicedesign'))return false;
+    if(page==='speech' && (name==='voice' && value('model')!=='mimo-v2.5-tts' || name==='voiceDescription' && value('model')!=='mimo-v2.5-tts-voicedesign'))return false;
     return true;
   }).map(f=>{
     const name=f.key.split('__').at(-1), advanced=(ADVANCED_FIELDS[page]||[]).includes(name);
     const item={...f,advanced,description:f.type==='number'?f.description:f.description||(/(?:Token|Key|Secret)$/.test(name)?'留空保留':'')};
+    if(page==='speech' && name==='style') {
+      const clone=value('model')==='mimo-v2.5-tts-voiceclone', design=value('model')==='mimo-v2.5-tts-voicedesign';
+      item.label=design?'音色描述与表达要求':'固定表达要求';
+      item.description=clone?'补充语速、语气和停顿要求；声音身份沿用上传的参考音频。':design?'描述声音身份、音色、语速和语气；聊天时会据此微调表达。':'补充语速、语气和停顿要求；保持所选预置音色。';
+    }
     if((['backend','authMode','harnessAuth'].includes(name)||page==='speech'&&name==='model'||config.directory==='qq'&&['accountId','kind'].includes(name))&&f.type==='select')item.reactive=true;
     if(page==='ai'&&backend!=='codex'&&f.key.startsWith('action_'))item.options=f.options.filter(o=>['none','check/model'].includes(o.value));
     return item;

@@ -16,12 +16,13 @@ import { GoogleDrive } from './google-drive.mjs';
 import { askCodex } from './codex-ai.mjs';
 import { askDeepSeek } from './deepseek-ai.mjs';
 import { askHarness } from './deepseek-harness.mjs';
-import { ConversationMemory, loadPersona } from './persona.mjs';
+import { ConversationMemory } from './persona.mjs';
 import { createMessageHandler } from './message-handler.mjs';
 import { SharedLibrary } from './shared-library.mjs';
 import { MessageMedia } from './message-media.mjs';
 import { OutgoingMedia } from './outgoing-media.mjs';
 import { XiaomiSpeech } from './xiaomi-speech.mjs';
+import { SpeechReferenceStore } from './speech-reference.mjs';
 import { speechDirection, planSpeechStyle } from './speech-direction.mjs';
 import { HistoryDigest } from './history-digest.mjs';
 import { ManagedMemory } from './managed-memory.mjs';
@@ -36,6 +37,9 @@ import { groupTemplate } from './group-templates.mjs';
 import { resolveGroupPolicy, profileSettings, resolveConversation } from './group-policy.mjs';
 import { MODULES, MODULE_IDS } from './module-registry.mjs';
 import { MessageWorkspace } from './message-workspace.mjs';
+import { ConversationLearner } from './conversation-learning.mjs';
+import { OnlineMedia } from './online-media.mjs';
+import { contactMemoryMode } from './group-policy.mjs';
 
 const project = new URL('../', import.meta.url);
 const execute = promisify(execFile);
@@ -45,6 +49,10 @@ export class BotRuntime {
     this.transports = new Map(); this.accountServices = new Map(); this.selfIds = new Map();
     this.pendingActions = new Map(); this.agentSessions = new Map(); this.toolAudit = []; this.credentialVersion = 0;
     this.memory = new ConversationMemory(); this.notes = new ManagedMemory(root);
+    this.learner = new ConversationLearner({ root, ai: (q, c) => this.ai(q, c), modeFor: event => {
+      const current = this.store.get(), conversation = resolveConversation(current, event);
+      return !this.stopped && moduleActive(root, 'core') && conversation.enabled && conversation.profileId === (event.profileId || '') ? contactMemoryMode(current, event) : 'normal';
+    } });
     this.school = new SchoolClient(new URL('session.json', root));
     this.schoolAgent = new AgentSchool(this.school, { getUserId: async () => (await readJSON(new URL('session.json', root))).userId });
     this.catalog = new PublicCatalog(new URL('public-assignments.json', root), new URL('public/books.json', project));
@@ -69,10 +77,12 @@ export class BotRuntime {
     };
     this.media = new MessageMedia(this.proxy);
     this.outgoingMedia = new OutgoingMedia(root);
-    this.speech = new XiaomiSpeech({ settings: () => this.store.get().speech, key: () => this.vault.get('mimoKey') });
+    this.onlineMedia = new OnlineMedia(this.outgoingMedia);
+    this.speechReferences = new SpeechReferenceStore(root);
+    this.speech = new XiaomiSpeech({ settings: () => this.config().speech, key: () => this.vault.get('mimoKey'), referenceAudio: id => this.speechReferences.dataURL(id) });
     this.monitor = new NoticeMonitor({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), send: (target, text) => this.proxy.send(target, text), root: new URL('notices/', root) });
-    this.realtime = new RealtimeNotices({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), send: (target, text, options) => this.proxy.send(target, text, options) });
     this.inbox = new MessageWorkspace({ monitor: this.monitor, root });
+    this.realtime = new RealtimeNotices({ settings: () => this.config(), ai: (q, c) => this.ai(q, c), record: batch => this.inbox.recordNotifications(batch) });
     this.members = new GroupMembers(this.proxy, () => [...new Set([...this.store.get().groups.map(group => group.id), ...(this.store.get().bindings || []).filter(b => b.accountId === 'default' && b.kind === 'group').map(b => b.targetId)])].filter(id => resolveGroupPolicy(this.store.get(), id).canReply));
     this.handler = createMessageHandler({ bot: this.proxy, memory: this.memory, getDependencies: event => this.dependencies(event) });
   }
@@ -97,24 +107,25 @@ export class BotRuntime {
   config() {
     const config = this.store.get();
     for (const [section, module] of [['github', 'github'], ['drive', 'drive'], ['school', 'ucloud'], ['monitor', 'notices']]) config[section].enabled &&= moduleActive(this.root, module);
-    if (config.realtime) config.realtime.enabled &&= moduleActive(this.root, 'notices') && !!config.accounts.find(account => account.id === config.realtime.accountId)?.enabled;
+    if (config.realtime) config.realtime.enabled &&= moduleActive(this.root, 'notices');
+    config.speech.enabled &&= moduleActive(this.root, 'speech');
     return config;
   }
   env(config = this.store.get()) {
     return modelEnv(config, { openaiKey: this.vault.get('openaiKey'), deepseekKey: this.vault.get('deepseekKey'), mimoKey: this.vault.get('mimoKey'), githubToken: config.github.authMode === 'token' ? this.vault.get('githubToken') : '' });
   }
-  async ai(question, context, config = this.config()) {
+  async ai(question, context, config = this.config(), options = {}) {
     const env = this.env(config);
-    if (config.ai.backend === 'api') return askAI(question, context, env);
+    if (config.ai.backend === 'api') return askAI(question, context, env, fetch, options);
     if (['mimo-api', 'mimo-token-plan-cn'].includes(config.ai.backend)) {
       const tokenPlan = config.ai.backend === 'mimo-token-plan-cn';
       const validKey = tokenPlan ? /^t{1,2}p-/i.test(env.OPENAI_API_KEY || '') : /^sk-/i.test(env.OPENAI_API_KEY || '');
       if (!validKey) throw new Error(tokenPlan ? 'MiMo Token Plan 中国集群需要 tp- 或 ttp- Key，请在模型设置中保存 MiMo Key。' : 'MiMo 按量 API 需要 sk- Key，请在模型设置中保存 MiMo Key。');
-      return askAI(question, context, env);
+      return askAI(question, context, env, fetch, options);
     }
-    if (config.ai.backend === 'deepseek') return askDeepSeek(question, context, env);
-    if (config.ai.backend === 'deepseek-harness') return askHarness(question, context, env);
-    if (config.ai.backend === 'codex') return askCodex(question, context, env);
+    if (config.ai.backend === 'deepseek') return askDeepSeek(question, context, env, fetch, options);
+    if (config.ai.backend === 'deepseek-harness') return askHarness(question, context, env, options);
+    if (config.ai.backend === 'codex') return askCodex(question, context, env, undefined, options);
     throw new Error('未知模型来源，请重新选择模型服务。');
   }
   agent(config) {
@@ -130,11 +141,11 @@ export class BotRuntime {
     const providers = [...(config.github.enabled && config.github.authMode === 'chatgpt' ? ['github'] : []), ...(config.drive.enabled && config.drive.authMode === 'chatgpt' ? ['google_drive'] : [])];
     const native = providers.length ? new NativeAgentTools({ client: this.connectors, providers }) : null;
     const tools = new AgentTools({ owner: () => live().bot.ownerQQ, settings: () => live().agent, github, drive, native, school: config.school.enabled ? this.school : null, schoolSubmission: config.school.enabled ? this.schoolAgent : null,
-      signature: () => createHash('sha256').update(JSON.stringify([live(), this.transportVersion, this.credentialVersion, this.google.authorizationRevision || 0, this.vault.get('githubToken'), this.vault.get('openaiKey')])).digest('hex'),
+      signature: () => createHash('sha256').update(JSON.stringify([live(), this.transportVersion, this.credentialVersion, this.memory.version, this.google.authorizationRevision || 0, this.vault.get('githubToken'), this.vault.get('openaiKey')])).digest('hex'),
       audit: entry => { this.toolAudit.push(entry); this.toolAudit = this.toolAudit.slice(-100); },
     });
     tools.pending = this.pendingActions;
-    return new ToolAgent({ tools, ai: (question, context) => this.ai(question, context, config), settings: () => live().agent, sessions: config.memory.enabled ? this.agentSessions : new Map(), context: event => ({ conversation: this.memory.get(event), botName: config.bot.name }) });
+    return new ToolAgent({ tools, ai: (question, context) => this.ai(question, context, config), settings: () => live().agent, sessions: config.memory.enabled ? this.agentSessions : new Map(), context: event => ({ conversation: config.memory.enabled ? this.memory.get(event) : [], botName: config.bot.name }) });
   }
   resources(config) {
     const env = this.env(config), legacy = new PrivateResources(env);
@@ -155,7 +166,7 @@ export class BotRuntime {
       ...(config.drive.authMode === 'chatgpt' ? { driveQuestion: (question, event) => {
         if (!config.drive.enabled) throw new Error('Google Drive 已停用。');
         if (event.message_type !== 'private' || String(event.user_id) !== config.bot.ownerQQ) throw new Error('只有主人私聊可读取私人 Drive。');
-        return this.native.driveQuestion(question, config.memory.enabled ? this.memory.key(event) : undefined);
+        return this.native.driveQuestion(question, config.memory.enabled ? this.memory.key(event) + ':epoch:' + this.memory.version : undefined);
       } } : {}),
       ...(config.github.authMode === 'chatgpt' ? { githubQuestion: (question, event) => {
         if (!config.github.enabled || event.message_type !== 'private' || String(event.user_id) !== config.bot.ownerQQ) throw new Error('只有主人私聊可读取私人 GitHub。');
@@ -165,7 +176,10 @@ export class BotRuntime {
   }
   dependencies(event) {
     const base = this.config(), conversation = resolveConversation(base, event), accountId = conversation.accountId;
-    const config = event ? profileSettings(base, conversation.targetId, accountId, conversation.kind) : base, enabled = config.groups.filter(g => g.enabled);
+    let config = event ? profileSettings(base, conversation.targetId, accountId, conversation.kind) : base;
+    const memoryMode = contactMemoryMode(base, event);
+    config = { ...config, memory: { ...config.memory, enabled: memoryMode === 'memory' } };
+    const enabled = config.groups.filter(g => g.enabled);
     const services = this.services(accountId);
     if (!this.library || this.libraryRoot !== config.library.root) { this.libraryRoot = config.library.root; this.library = config.library.root ? new SharedLibrary(config.library.root) : null; }
     const catalog = config.school.enabled ? this.catalog : {
@@ -174,22 +188,24 @@ export class BotRuntime {
     const groupIds = [...new Set([...config.groups.map(g => g.id), ...(config.bindings || []).filter(b => b.accountId === accountId && b.kind === 'group').map(b => b.targetId)])];
     const policies = groupIds.map(id => resolveGroupPolicy(config, id, accountId));
     const observable = !this.stopped && (base.accounts?.find(a => a.id === accountId)?.enabled ?? accountId === 'default') && (!event?.transportGeneration || this.transports.get(accountId)?.generation === event.transportGeneration);
-    return { enabled: observable && (!event || !Object.hasOwn(event, 'profileId') || event.profileId === conversation.profileId) && (conversation.kind !== 'private' || conversation.enabled) && moduleActive(this.root, 'core'), observeEnabled: observable, observe: event => { this.realtime.observe(event); if (moduleActive(this.root, 'core') && conversation.enabled) services.media.remember?.(event); }, capabilities: JSON.stringify(config), groups: policies.filter(g => g.canReply).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
-      resources: this.resources(config), agent: this.agent(config), ai: (q, c) => this.ai(q, c, config), library: this.library, media: services.media, members: services.members,
+    return { enabled: observable && (!event || !Object.hasOwn(event, 'profileId') || event.profileId === conversation.profileId) && (conversation.kind !== 'private' || conversation.enabled) && moduleActive(this.root, 'core'), observeEnabled: observable, observe: event => { this.realtime.observe(event); if (moduleActive(this.root, 'core') && conversation.enabled) services.media.remember?.(event); }, capabilities: JSON.stringify([config, this.memory.version]), groups: policies.filter(g => g.canReply).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
+      memoryMode, learn: event => this.learner.observe(event, { profileId: conversation.profileId, mode: memoryMode }),
+      resources: this.resources(config), agent: this.agent(config), ai: (q, c, options) => this.ai(q, c, config, options), library: this.library, media: services.media, members: services.members,
       outgoingMedia: { list: event => this.outgoingMedia.available(event), outgoing: (event, id) => this.outgoingMedia.outgoing(event, id), collect: (event, input) => this.outgoingMedia.collect(event, input, { call: (action, params) => this.proxy.call(action, params, { accountId }) }) },
-      speech: { ...speechDirection(config.speech), autoReply: config.speech.enabled && config.speech.autoReply,
-        plan: (text, event) => planSpeechStyle(text, { ai: (q, c) => this.ai(q, c, config), direction: speechDirection(config.speech), conversation: this.memory.get(event).slice(-4).map(row => ({ speaker: row.speaker, text: row.text })) }),
+      speech: config.speech.enabled ? { ...speechDirection(config.speech), autoReply: config.speech.autoReply,
+        plan: (text, event) => planSpeechStyle(text, { ai: (q, c) => this.ai(q, c, config), direction: speechDirection(config.speech), conversation: config.memory.enabled ? this.memory.get(event).slice(-4).map(row => ({ speaker: row.speaker, text: row.text })) : [] }),
         synthesize: (text, event, direction) => this.speech.synthesize(text, [accountId, event.message_type, event.group_id || event.user_id].join(':'), direction),
-        synthesizeBatch: (requests, event) => this.speech.synthesizeBatch(requests, [accountId, event.message_type, event.group_id || event.user_id].join(':')) },
+        synthesizeBatch: (requests, event, options) => this.speech.synthesizeBatch(requests, [accountId, event.message_type, event.group_id || event.user_id].join(':'), options) } : null,
       stickers: { list: event => services.media.listStickers(event), outgoing: (event, id) => services.media.outgoingSticker(event, id), send: (event, id) => this.proxy.sendSegments({ ...(event.message_type === 'group' ? { group_id: String(event.group_id) } : { user_id: String(event.user_id) }), accountId }, [services.media.outgoingSticker(event, id)]) },
-      notes: config.memory.enabled ? { context: event => this.notes.context(event, { profileId: conversation.profileId, accountId }) } : null, monitor: this.monitor, groupTemplate: id => groupTemplate(config.groups.find(group => group.id === id)),
-      history: accountId === 'default' && !conversation.profileId && config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
-      persona: accountId === 'default' && !conversation.profileId ? loadPersona : async () => ({ voice: [], learned: false }), shareDocumentsWithModel: config.library.sendToModel, transportVersion: this.transportVersion,
+      notes: config.memory.enabled ? { context: (event, query) => this.learner.context(event, { profileId: conversation.profileId, mode: memoryMode, query }) } : null, monitor: this.monitor, groupTemplate: id => groupTemplate(config.groups.find(group => group.id === id)),
+      history: config.memory.enabled && config.history.enabled ? { context: id => enabled.some(g => g.id === id && g.historyEnabled) ? this.history.context(id) : null } : null,
+      persona: async () => ({ voice: [], learned: false }), shareDocumentsWithModel: config.library.sendToModel, transportVersion: this.transportVersion,
     };
   }
   apply() {
-    const config = this.config(); this.memory.configure(config.memory);
-    const personaSignature = JSON.stringify([config.accounts, config.bindings, config.profiles, config.groups, config.bot, config.ai]);
+    this.learner.reconcile();
+    const config = this.config(); this.memory.configure({ ...config.memory, enabled: true });
+    const personaSignature = JSON.stringify([config.accounts, config.bindings, config.profiles, config.groups, config.bot, config.ai, config.chat]);
     if (this.personaSignature && this.personaSignature !== personaSignature) this.memory.clear('all');
     this.personaSignature = personaSignature;
     const identities = new Map(config.groups.map(group => [group.id, JSON.stringify([profileSettings(config, group.id).bot, profileSettings(config, group.id).ai, group.profileId, group.template, group.templatePrompt])]));
@@ -221,11 +237,23 @@ export class BotRuntime {
         if (!/^\d{5,15}$/.test(selfId)) return;
         const previous = this.selfIds.get(account.id);
         if (previous && previous !== selfId || [...this.selfIds].some(([id, value]) => id !== account.id && value === selfId)) return;
+        if (entry.selfId && entry.selfId !== selfId) {
+          for (const scope of this.memory.sessions.keys()) if (scope.startsWith(`account:${account.id}:`)) this.memory.clear(scope);
+          const services = this.services(account.id); services.members.clear(); services.media.stickers.clear();
+          this.agentSessions.clear(); this.pendingActions.clear(); this.native.selections.clear();
+          for (const scope of this.learner.watched.keys()) if (scope.startsWith(`account:${account.id}:`)) this.learner.invalidate(scope);
+        }
+        entry.selfId = selfId;
         this.selfIds.set(account.id, selfId);
-        const event = { ...incoming, accountId: account.id, transportGeneration: generation };
+        const event = { ...incoming, accountId: account.id, transportGeneration: entry.generation };
         event.profileId = resolveConversation(this.config(), event).profileId;
         return this.handler(event);
-      });
+      }, { onConnect: () => {
+        if (this.stopped || this.transports.get(account.id) !== entry) return;
+        // A new authenticated connection may belong to a newly logged-in QQ.
+        // Revoke old work before accepting its first lifecycle/message event.
+        this.selfIds.delete(account.id); entry.generation = ++this.transportVersion;
+      } });
       this.transports.set(account.id, entry); entry.bot.connect();
     }
     this.bot = this.transports.get('default')?.bot || null;
@@ -236,7 +264,7 @@ export class BotRuntime {
     if (!Array.isArray(this.state.known) || !this.state.sent || typeof this.state.sent !== 'object') throw new Error('提醒状态格式无效，请检查 data/state.json。');
     this.apply(); this.interval = setInterval(() => this.tick().catch(() => {}), 1000); this.interval.unref(); this.tick().catch(() => {});
   }
-  stop() { this.stopped = true; clearInterval(this.interval); for (const entry of this.transports.values()) entry.bot.close(); this.transports.clear(); this.transportVersion++; this.connectors.dispose(); this.account.close(); }
+  stop() { this.stopped = true; this.learner.close(); clearInterval(this.interval); for (const entry of this.transports.values()) entry.bot.close(); this.transports.clear(); this.transportVersion++; this.connectors.dispose(); this.account.close(); }
   async sync() {
     if (this.schoolLoginBusy) throw new Error('学校登录正在进行，请稍后同步。');
     if (!this.config().school.enabled) throw new Error('请先启用 UCloud 插件与作业功能。');
@@ -273,7 +301,7 @@ export class BotRuntime {
       if (!this.stopped && current.monitor.enabled && !this.handler.isBusy() && (!this.lastMonitor || Date.now() - this.lastMonitor >= 60000)) {
         this.lastMonitor = Date.now(); await this.monitor.run();
       }
-      if (!this.stopped && moduleActive(this.root, 'core') && current.history.enabled && current.memory.enabled && !this.handler.isBusy() && (!this.lastHistory || Date.now() - this.lastHistory > 60000)) {
+      if (!this.stopped && moduleActive(this.root, 'core') && current.history.enabled && !this.handler.isBusy() && (!this.lastHistory || Date.now() - this.lastHistory > 60000)) {
         this.lastHistory = Date.now();
         await this.history.tick(current.groups.filter(g => g.enabled && g.historyEnabled).map(g => g.id));
       }
@@ -285,7 +313,7 @@ export class BotRuntime {
       accounts: (this.store.get().accounts || []).map(a => ({ id: a.id, name: a.name, enabled: a.enabled, connected: this.transports.get(a.id)?.bot.socket?.readyState === WebSocket.OPEN, selfId: this.selfIds.get(a.id) || '', configured: !!this.vault.get(a.id === 'default' ? 'onebotToken' : `onebotToken:${a.id}`) })),
       qq: { connected: this.bot?.socket?.readyState === WebSocket.OPEN, configured: !!this.vault.get('onebotToken'), accountConfigured: !!this.store.get().bot.ownerQQ },
       configured: { ucloud: await exists('session.json'), github: this.store.get().github.authMode === 'chatgpt' ? this.connectors.apps.has('github') : !!this.vault.get('githubToken') || await exists('gh/hosts.yml'), drive: this.store.get().drive.authMode === 'chatgpt' ? this.connectors.apps.has('google_drive') : !!this.vault.get('googleTokens') || await exists('rclone.conf') },
-      checks: this.checks, realtime: this.realtime.status(), pendingMessages: this.handler.isBusy(), settingsRevision: this.store.get().revision,
+      checks: this.checks, realtime: this.realtime.status(), pendingMessages: this.handler.isBusy(), messageDelivery: this.handler.status?.(), settingsRevision: this.store.get().revision,
       modules: Object.fromEntries(MODULE_IDS.map(name => [name, moduleActive(this.root, name)])),
     };
   }

@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 import { loginSchool } from '../src/school-login.mjs';
-import { saveJSON } from '../src/core.mjs';
+import { saveSchoolSession } from '../src/core.mjs';
 if (process.stdin.isTTY) process.stdin.setRawMode(true);
 console.log('学校标准认证就绪；凭据只从本次标准输入接收，不保存、不回显。');
 const input = createInterface({ input: process.stdin, terminal: false });
@@ -11,7 +11,7 @@ try {
   if (!credentials?.username || !credentials?.password) throw new Error('MISSING_CREDENTIALS');
   const session = await loginSchool(credentials.username, credentials.password);
   credentials = null;
-  await saveJSON(new URL('../data/session.json', import.meta.url), session);
+  await saveSchoolSession(new URL('../data/session.json', import.meta.url), session);
   console.log('学校标准认证成功；已保存会话和本机加密的续期凭据，不保存密码。');
 } catch (error) {
   if (process.stdin.isTTY) process.stdin.setRawMode(false);

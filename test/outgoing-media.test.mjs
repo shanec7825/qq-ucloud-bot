@@ -18,6 +18,7 @@ import { startAdmin } from '../src/admin-server.mjs';
 import { AdminBridge, allowedRoute } from '../napcat-plugin/bridge.mjs';
 import { createNativeConfigAdapter } from '../napcat-plugin/native-config.mjs';
 import { taskSystemPrompt } from '../src/chat-rules.mjs';
+import { deliverReply } from '../src/reply-delivery.mjs';
 
 const png = await createCanvas(4, 4).encode('png');
 const event = { post_type: 'message', message_type: 'private', accountId: 'default', self_id: '10000001', user_id: '20000001', message_id: '1', message: [] };
@@ -100,9 +101,10 @@ test('chat selects saved media by name, validates model IDs and speaks requested
   const library=new OutgoingMedia(root),item=await library.put(upload());
   const deps={owner:'99999999',catalog:{list:async()=>[]},persona:async()=>({voice:[]}),outgoingMedia:{list:e=>library.available(e),outgoing:(e,id)=>library.outgoing(e,id)},speech:{synthesize:async()=>({type:'record',data:{file:'base64://'+wav().toString('base64')}})},ai:async()=>JSON.stringify({text:'好呀',mediaIds:[item.id]})};
   const result=await routeNatural('/表情包 开心',event,deps);assert.equal(result.segments[0].type,'image');assert.equal(result.text,'');
-  const reply=await routeNatural('用语音回答：你好',event,deps);assert.deepEqual(reply.segments.map(p=>p.type),['image','record']);assert.equal(reply.text,'好呀');
+  const delivered=[],bot={send:async(_target,text)=>{delivered.push(text);return [];},sendSegments:async(_target,[part])=>{delivered.push(part.type);return {};}};
+  const reply=await routeNatural('用语音回答：你好',event,deps);assert.deepEqual(reply.segments.map(p=>p.type),['image']);assert.equal(reply.text,'');await deliverReply(reply,{bot,target:{}});assert.deepEqual(delivered,['image','record']);
   deps.ai=async()=>JSON.stringify({text:'不可用',mediaIds:['outside']});assert.equal(await routeNatural('你好',event,deps),'不可用');
-  deps.ai=async()=>'文字保留';deps.speech.synthesize=async()=>{throw Error('额度不足');};assert.match(await routeNatural('用语音回答：你好',event,deps),/文字保留.*\n.*额度不足/);
+  deps.ai=async()=>'文字保留';deps.speech.synthesize=async()=>{throw Error('额度不足');};const failure=await deliverReply(await routeNatural('用语音回答：你好',event,deps),{bot,target:{}});assert.equal(failure.summary,'文字保留');assert.ok(!delivered.join('').includes('额度不足'));
   assert.match(taskSystemPrompt({mode:'conversation',outgoingMedia:[item]}),/mediaIds/);
 }));
 
@@ -110,7 +112,7 @@ test('message handler sends native media once, preserves memory and reports tran
   const sent=[],memory=new ConversationMemory(),bot={send:async(_target,text)=>{sent.push({text});return [{message_id:1}];},sendSegments:async(target,parts)=>{sent.push({target,parts});return {message_id:2};}};
   const handler=createMessageHandler({bot,memory,groups:[],speech:{synthesize:async()=>({type:'record',data:{file:'base64://'+wav().toString('base64')}})}});
   await handler({...event,message:[{type:'text',data:{text:'/语音 Hello'}}]});assert.equal(sent.length,1);assert.equal(sent[0].parts[0].type,'record');assert.match(memory.get(event).at(-1).text,/语音.*Hello/);
-  bot.sendSegments=async()=>{throw Error('conversion failed');};await handler({...event,message_id:2,message:[{type:'text',data:{text:'/语音 Again'}}]});assert.match(sent.at(-1).text,/未成功/);assert.match(memory.get(event).at(-1).text,/未完成/);
+  bot.sendSegments=async()=>{throw Error('conversion failed');};const before=sent.length;await handler({...event,message_id:2,message:[{type:'text',data:{text:'/语音 Again'}}]});assert.equal(sent.length,before);assert.match(memory.get(event).at(-1).text,/未完成/);
 });
 
 test('speech settings migrate additively, validate official endpoints and expose a masked key in native UI',async()=>{

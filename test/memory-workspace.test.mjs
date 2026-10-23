@@ -49,22 +49,24 @@ test('manual digest edits and deliberate empty clear survive generated races and
   const history = new HistoryDigest({ root: new URL('history/', root) });
   assert.equal((await history.context('12345')).summary, '');
 }));
-test('inbox state persists across instances, rejects foreign IDs, prunes stale state and preserves reports', () => sandbox(async root => {
+test('only explicitly added notifications become tasks; status persists independently of source retention', () => sandbox(async root => {
   let reports = [{id:'report',groupId:'12345',groupName:'群',createdAt:'2026-01-01',delivery:'web',items:[{id:'one',title:'作业',summary:'完成作业',priority:'important',deadlineText:'明天',sources:[{excerpt:'明天交作业'}]},{id:'two',title:'考试',summary:'复习',sources:[]}]}];
   const original = JSON.stringify(reports), monitor = {reports:async()=>reports};
   const a = new MessageWorkspace({monitor,root}), b = new MessageWorkspace({monitor,root});
+  assert.equal((await a.list()).items.length,0);
+  await Promise.all([a.addTodo('report:one'),b.addTodo('report:two')]);
   await Promise.all([a.setStatus('report:one','done'),b.setStatus('report:two','archived')]);
   assert.deepEqual((await b.list()).counts,{pending:0,done:1,archived:1});
   await a.setStatus('report:one','pending');
-  assert.equal((await b.list()).items[0].status,'pending');
+  assert.equal((await b.list()).items.find(item=>item.id==='report:one').status,'pending');
   assert.equal(JSON.stringify(reports),original);
   await assert.rejects(a.setStatus('missing:one','done'));
   assert.throws(()=>a.setStatus('report:one','invalid'));
   reports = [{...reports[0],items:[reports[0].items[0]]}];
   await a.setStatus('report:one','done');
-  assert.deepEqual(Object.keys(await readJSON(a.file(),{})),['report:one']);
+  assert.deepEqual((await readJSON(a.file(),{})).items.map(item=>item.id).sort(),['report:one','report:two']);
   reports = [];
-  assert.deepEqual((await a.list()).counts,{pending:0,done:0,archived:0});
+  assert.deepEqual((await a.list()).counts,{pending:0,done:1,archived:1});
 }));
 test('an in-flight history generation cannot restore an owner-cleared summary', () => sandbox(async root => {
   let started;
@@ -89,14 +91,15 @@ test('tasks sharing evidence IDs have stable independent projected identities', 
   ]}];
   const monitor = {reports:async()=>reports}, original = JSON.stringify(reports);
   const workspace = new MessageWorkspace({monitor,root});
-  const {items} = await workspace.list();
+  const items = await workspace.sourceItems();
   assert.equal(new Set(items.map(item=>item.id)).size,3);
   assert.ok(items.every(item=>item.itemId === 'same' && item.id.length <= 256));
+  for(const item of items)await workspace.addTodo(item.id);
   await workspace.setStatus(items[0].id,'done');
   await workspace.setStatus(items[1].id,'archived');
   const reload = await new MessageWorkspace({monitor,root}).list();
-  assert.deepEqual(reload.items.map(item=>item.id),items.map(item=>item.id));
-  assert.deepEqual(reload.items.map(item=>item.status),['done','archived','pending']);
+  assert.deepEqual(reload.items.map(item=>item.id).sort(),items.map(item=>item.id).sort());
+  assert.deepEqual(items.map(item=>reload.items.find(row=>row.id===item.id).status),['done','archived','pending']);
   assert.deepEqual(reload.counts,{pending:1,done:1,archived:1});
   assert.equal(JSON.stringify(reports),original);
 }));

@@ -9,21 +9,22 @@
 #endif
 [Setup]
 AppId={{350A316B-2639-4E79-A652-9051E59E6685}
-AppName=QQ Agent
+AppName=Qlyra
 AppVersion={#AppVersion}
-AppPublisher=QQ Agent contributors
+AppPublisher=Qlyra contributors
 AppPublisherURL=https://github.com/shanec7825/qq-ucloud-bot
 AppSupportURL=https://github.com/shanec7825/qq-ucloud-bot/issues
+; Keep the installation identity and location so existing installs upgrade in place.
 DefaultDirName={localappdata}\Programs\QQAgent
-DefaultGroupName=QQ Agent
+DefaultGroupName=Qlyra
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDirectory}
-OutputBaseFilename=QQ-Agent-Setup-{#AppVersion}-x64
+OutputBaseFilename=Qlyra-Setup-{#AppVersion}-x64
 SetupIconFile={#AppFiles}\app.ico
-UninstallDisplayIcon={app}\QQAgent.exe
+UninstallDisplayIcon={app}\Qlyra.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -37,9 +38,13 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: checkedonce
 [Files]
 Source: "{#AppFiles}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{autoprograms}\QQ Agent\QQ Agent"; Filename: "{app}\QQAgent.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\QQ Agent"; Filename: "{app}\QQAgent.exe"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{autoprograms}\QQ Agent\卸载 QQ Agent"; Filename: "{uninstallexe}"
+Name: "{autoprograms}\Qlyra\Qlyra"; Filename: "{app}\Qlyra.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\Qlyra"; Filename: "{app}\Qlyra.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\Qlyra\卸载 Qlyra"; Filename: "{uninstallexe}"
+[InstallDelete]
+Type: files; Name: "{autoprograms}\QQ Agent\QQ Agent.lnk"
+Type: files; Name: "{autoprograms}\QQ Agent\卸载 QQ Agent.lnk"
+Type: files; Name: "{autodesktop}\QQ Agent.lnk"
 [Run]
-Filename: "{app}\QQAgent.exe"; Description: "打开 QQ Agent"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Qlyra.exe"; Description: "打开 Qlyra"; Flags: nowait postinstall skipifsilent
 ; Data lives outside {app}; uninstall never removes user projects, sessions or authorization.

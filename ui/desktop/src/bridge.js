@@ -3,12 +3,14 @@
 // Page -> shell: window.chrome.webview.postMessage('<action>').
 // home.html installs a bootstrap queue first so both render* functions exist before this bundle runs.
 
-const LONG_ACTIONS = new Set(['install', 'start', 'setup', 'stop-bot']);
+const LONG_ACTIONS = new Set(['install', 'start', 'setup', 'stop-bot', 'stop-conflict', 'trim-ports']);
 const DEFAULT_MESSAGE = {
   install: '正在准备运行组件，首次下载可能需要几分钟…',
   start: '正在启动机器人…',
   setup: '正在准备组件并启动机器人…',
   'stop-bot': '正在停止机器人…',
+  'stop-conflict': '正在关闭其它工作区的 NapCat 后台…',
+  'trim-ports': '正在关闭多余监听端口…',
 };
 
 export function createBridgeStore() {

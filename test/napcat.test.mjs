@@ -26,8 +26,20 @@ test('local trust exception affects only installed agent modules and retains sen
   assert.throws(() => trustAgentPlugins(previous.replace('napcat-plugin-slyra-monitor', 'napcat-plugin-other')));
 });
 
+test('upgrading five local plugins adds speech without trusting other plugins or sensitive names', () => {
+  const previousIds = ['napcat-plugin-qq-agent', 'napcat-plugin-agent-github', 'napcat-plugin-agent-drive', 'napcat-plugin-agent-ucloud', 'napcat-plugin-agent-notices'];
+  const source = 'return this.isOfficialPlugin(id) || (' + JSON.stringify(previousIds) + '.includes(id) && !blocked) ? null : blocked ? "blocked-keyword" : "blocked-unofficial";';
+  const upgraded = trustAgentPlugins(source);
+  const evaluate = Function('id', 'blocked', upgraded).bind({ isOfficialPlugin: () => false });
+  assert.equal(evaluate('napcat-plugin-agent-speech', false), null);
+  assert.equal(evaluate('napcat-plugin-agent-speech', true), 'blocked-keyword');
+  assert.equal(evaluate('napcat-plugin-other', false), 'blocked-unofficial');
+  assert.equal(trustAgentPlugins(upgraded), upgraded);
+  assert.throws(() => trustAgentPlugins(source.replace('napcat-plugin-agent-drive', 'napcat-plugin-other')));
+});
+
 test('native plugin card remains available alongside extension pages', () => {
-  assert.equal(PLUGIN_MODULES.length, 5);
+  assert.equal(PLUGIN_MODULES.length, 6);
   for (const plugin of PLUGIN_MODULES) {
     const schema = nativeConfigSchema(plugin.id);
     assert.equal(schema[0].type, 'select'); assert.equal(schema[0].reactive, true);

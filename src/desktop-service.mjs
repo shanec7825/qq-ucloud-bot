@@ -12,7 +12,7 @@ import { AdminBridge } from '../napcat-plugin/bridge.mjs';
 import { ensureEngine } from '../napcat-plugin/engine.mjs';
 import { PLUGIN_MODULES } from '../napcat-plugin/catalog.mjs';
 import { protectSchoolSecret, unprotectSchoolSecret } from './school-secret.mjs';
-import { selectedModel } from './ai-providers.mjs';
+import { selectedModel, MIMO_TOKEN_PLAN_CN_BASE_URL } from './ai-providers.mjs';
 
 const exec = promisify(execFile), origin = 'http://127.0.0.1:6099';
 async function runtimeOwner() {
@@ -51,7 +51,14 @@ const SYSTEM_DEFS = [
   { id: 'node', label: 'Node 运行时' },
   { id: 'powershell', label: 'Windows PowerShell' },
 ];
-const COMPONENT_DEFS = [{ id: 'napcat', label: 'NapCat 运行组件' }, { id: 'codex', label: 'ChatGPT / Codex 登录组件', optional: true }];
+const COMPONENT_DEFS = [
+  { id: 'napcat', label: 'NapCat 运行组件' },
+  { id: 'codex', label: 'ChatGPT / Codex 认证组件', optional: true },
+  { id: 'mimo', label: '小米 MiMo / Token Plan 组件', optional: true },
+];
+const WATCHED_PORTS = [6099, 3001, 6100];
+const PORT_DEFS = [{ port: 6099, label: 'NapCat 面板' }, { port: 3001, label: 'OneBot 连接' }, { port: 6100, label: '管理接口' }];
+const INBOUND_SECTIONS = ['httpServers', 'httpSseServers', 'websocketServers'];
 const clean = (value, fallback = '') => { const text = String(value ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim(); return (text || fallback).slice(0, 200); };
 async function runTool(command, args, timeoutMs) {
   try { const { stdout } = await exec(command, args, { windowsHide: true, timeout: timeoutMs }); return { ok: true, output: String(stdout) }; }
@@ -101,10 +108,26 @@ function codexVersion(versions) {
   const match = /releases\/download\/([^/]+)\//.exec(String(versions?.codexURL || ''));
   return match ? clean(match[1]) : '';
 }
+const normalizePath = value => { const text = String(value ?? '').trim(); if (!text) return ''; try { return resolve(text).toLowerCase(); } catch { return text.toLowerCase().replaceAll('/', '\\'); } };
+const isNapcatPath = value => /\\tools\\napcat\\node\.exe$/i.test(normalizePath(value));
+async function defaultListenerReader() {
+  try {
+    const { stdout } = await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='SilentlyContinue'; $rows=@(Get-NetTCPConnection -State Listen | ForEach-Object { $p=Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; [pscustomobject]@{ port=$_.LocalPort; pid=$_.OwningProcess; path=$(if($p -and $p.Path){[string]$p.Path}else{''}) } }); ConvertTo-Json -InputObject $rows -Compress"], { windowsHide: true, timeout: 8000 });
+    const parsed = JSON.parse(String(stdout).replace(/^\uFEFF/, '').trim() || '[]');
+    return (Array.isArray(parsed) ? parsed : [parsed]).map(row => ({ port: Number(row?.port), pid: Number(row?.pid), path: String(row?.path ?? '') })).filter(row => Number.isFinite(row.port) && Number.isFinite(row.pid) && row.path);
+  } catch { return []; }
+}
+async function defaultProcessKiller({ pid }) { await exec('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, timeout: 10000 }); }
+async function defaultSecretReader(root) {
+  const dataRoot = pathToFileURL(join(root, 'data') + sep), vault = new SecretVault(dataRoot);
+  await vault.load(); return vault.get('mimoKey') || '';
+}
+function mimoKeyType(key) { return /^sk-/i.test(key) ? 'api' : /^t{1,2}p-/i.test(key) ? 'token-plan' : null; }
 
 export class DesktopService {
-  constructor(root, { fetcher = fetch, sessionCodec = { protect: protectSchoolSecret, unprotect: unprotectSchoolSecret }, ownerReader = runtimeOwner, systemReader = defaultSystemCheck, extractor = defaultExtract, progress = null } = {}) {
+  constructor(root, { fetcher = fetch, sessionCodec = { protect: protectSchoolSecret, unprotect: unprotectSchoolSecret }, ownerReader = runtimeOwner, systemReader = defaultSystemCheck, extractor = defaultExtract, listenerReader = defaultListenerReader, processKiller = defaultProcessKiller, secretReader = defaultSecretReader, progress = null } = {}) {
     this.root = root; this.fetch = fetcher; this.sessionCodec = sessionCodec; this.ownerReader = ownerReader; this.systemReader = systemReader; this.extractor = extractor;
+    this.listenerReader = listenerReader; this.processKiller = processKiller; this.secretReader = secretReader;
     this.progress = typeof progress === 'function' ? progress : null; this.webui = join(root, 'tools/napcat/napcat/config/webui.json');
   }
   report(payload) { if (!this.progress) return; try { this.progress(payload); } catch { /* 进度回调不得影响操作本身。 */ } }
@@ -123,12 +146,69 @@ export class DesktopService {
   async componentStatus() {
     let versions = {}; try { versions = await json(join(this.root, 'desktop/versions.json'), {}); } catch { versions = {}; }
     const ready = { napcat: await exists(join(this.root, 'tools/napcat/node.exe')), codex: await exists(join(this.root, 'tools/codex/codex-x86_64-pc-windows-msvc.exe')) };
-    return COMPONENT_DEFS.map(def => ({
-      id: def.id, label: def.label, ok: ready[def.id],
-      version: def.id === 'napcat' ? clean(versions.napcat) : codexVersion(versions),
-      detail: ready[def.id] ? (def.id === 'napcat' ? '运行组件已就绪。' : '登录组件已就绪。') : (def.id === 'napcat' ? '尚未准备，请在启动向导中准备运行组件。' : '未安装；可选组件，不影响机器人运行。'),
-      ...(def.optional ? { optional: true } : {}),
-    }));
+    const mimo = await this.mimoStatus();
+    return [
+      { id: 'napcat', label: COMPONENT_DEFS[0].label, ok: ready.napcat, version: clean(versions.napcat), detail: ready.napcat ? '运行组件已就绪。' : '尚未准备，请在启动向导中准备运行组件。' },
+      { id: 'codex', label: COMPONENT_DEFS[1].label, ok: ready.codex, version: codexVersion(versions), detail: ready.codex ? '已就绪；用于 ChatGPT 订阅登录认证。' : '未安装；可选组件，用于 ChatGPT 订阅登录（Codex）认证。', optional: true },
+      { id: 'mimo', label: COMPONENT_DEFS[2].label, ok: mimo.ok, version: '', detail: mimo.detail, optional: true },
+    ];
+  }
+  async mimoStatus() {
+    let key = '', readFailed = false;
+    try { key = String((await this.secretReader(this.root)) || ''); } catch { readFailed = true; }
+    if (!key) return { ok: false, detail: readFailed ? '无法读取本机密钥库，按未配置处理。' : '未保存 MiMo Key；语音与 MiMo 模型需要先在设置中保存 Key。' };
+    const type = mimoKeyType(key);
+    if (!type) return { ok: true, detail: '已保存 MiMo Key，但类型无法识别：应以 sk-（按量 API）或 tp-、ttp-（Token Plan）开头。' };
+    let settings = {}; try { settings = await json(join(this.root, 'data/settings.json'), {}); } catch { settings = {}; }
+    const backend = String(settings?.ai?.backend ?? ''), speechURL = String(settings?.speech?.baseURL ?? MIMO_TOKEN_PLAN_CN_BASE_URL), plan = type === 'token-plan';
+    const notes = [];
+    if ((backend === 'mimo-api' || backend === 'mimo-token-plan-cn') && (backend === 'mimo-token-plan-cn') !== plan) notes.push(backend === 'mimo-token-plan-cn' ? '所选模型后端为 Token Plan，与 Key 类型不匹配。' : '所选模型后端为按量 API，与 Key 类型不匹配。');
+    if (speechURL.startsWith('https://token-plan-') !== plan) notes.push(speechURL.startsWith('https://token-plan-') ? '语音地址为 Token Plan 集群，与 Key 类型不匹配。' : '语音地址为按量 API，与 Key 类型不匹配。');
+    return { ok: true, detail: `已保存${plan ? 'Token Plan Key（tp-、ttp-）' : '按量 API Key（sk-）'}。` + (notes.length ? notes.join('') : '与所选模型后端、语音地址匹配。') };
+  }
+  async listeners() {
+    try {
+      const rows = await this.listenerReader();
+      return (Array.isArray(rows) ? rows : []).map(row => ({ port: Number(row?.port), pid: Number(row?.pid), path: String(row?.path ?? '') })).filter(row => Number.isFinite(row.port) && Number.isFinite(row.pid) && row.path);
+    } catch { return []; }
+  }
+  ownPaths() { return [join(this.root, 'tools/napcat/node.exe'), process.execPath].map(normalizePath); }
+  isForeign(row) { const path = normalizePath(row.path); return !!path && !this.ownPaths().includes(path); }
+  async conflictStatus() {
+    const rows = (await this.listeners()).filter(row => WATCHED_PORTS.includes(row.port) && this.isForeign(row));
+    return { owners: [...new Set(rows.map(row => row.path))], ports: [...new Set(rows.map(row => row.port))].sort((a, b) => a - b) };
+  }
+  async portStatus() {
+    try {
+      const rows = await this.listeners(), folder = join(this.root, 'tools/napcat/napcat/config'), own = this.ownPaths(), extras = new Map();
+      for (const name of await this.onebotConfigFiles()) {
+        let config; try { config = await json(join(folder, name), null); } catch { continue; }
+        for (const section of INBOUND_SECTIONS) {
+          const list = config?.network?.[section]; if (!Array.isArray(list)) continue;
+          for (const entry of list) {
+            const port = Number(entry?.port);
+            if (!entry || typeof entry !== 'object' || !Number.isFinite(port) || entry.enable === false || (entry.name === 'qq-agent' && port === 3001)) continue;
+            if (!extras.has(port)) extras.set(port, typeof entry.name === 'string' && entry.name ? entry.name : '额外监听');
+          }
+        }
+      }
+      const describe = port => {
+        const list = rows.filter(row => row.port === port), foreign = list.find(row => !own.includes(normalizePath(row.path)));
+        if (foreign) return { role: 'foreign', detail: `被外来进程占用：${foreign.path}` };
+        if (list.length) return { detail: port === 6100 ? '本机机器人进程监听中' : '本工作区 NapCat 监听中' };
+        return {};
+      };
+      const result = PORT_DEFS.map(item => { const state = describe(item.port); return { port: item.port, label: item.label, role: state.role || 'required', ...(state.detail ? { detail: state.detail } : {}) }; });
+      for (const [port, label] of [...extras].sort((a, b) => a[0] - b[0])) {
+        const state = describe(port);
+        result.push({ port, label, role: state.role || 'extra', detail: state.detail || '配置中仍启用的多余入站监听' });
+      }
+      return result;
+    } catch { return []; }
+  }
+  async onebotConfigFiles() {
+    let extra = []; try { extra = (await readdir(join(this.root, 'tools/napcat/napcat/config'))).filter(name => /^onebot11_\d+\.json$/.test(name)).sort(); } catch {}
+    return ['onebot11.json', ...extra];
   }
   async assertRuntimeWorkspace() {
     const owners = await this.ownerReader();
@@ -162,10 +242,10 @@ export class DesktopService {
     try {
       const credential = await this.session(), qq = await this.native('QQLogin/CheckLoginStatus', {}, credential);
       state.webuiAvailable = true; state.qqLoggedIn = !!qq.isLogin; state.loginPhase = qq.loginPhase || '';
-    } catch (error) { if (error.code === 'WORKSPACE_MISMATCH') { state.workspaceError = error.message; } /* A stopped service is a normal launcher state. */ }
+    } catch (error) { if (error.code === 'WORKSPACE_MISMATCH') { state.workspaceError = error.message; state.conflict = await this.conflictStatus(); } /* A stopped service is a normal launcher state. */ }
     try { const response = await new AdminBridge(this.root).request('GET', 'state'); if (response.status === 200) { state.botConnected = response.data.status.qq.connected; state.botName = response.data.settings.bot.name; state.model = selectedModel(response.data.settings); } } catch {}
-    const [system, components] = await Promise.all([this.systemStatus(), this.componentStatus()]);
-    state.system = system; state.components = components;
+    const [system, components, ports] = await Promise.all([this.systemStatus(), this.componentStatus(), this.portStatus()]);
+    state.system = system; state.components = components; state.ports = ports;
     return state;
   }
   async detached(binary, args, name, env = childEnv()) {
@@ -223,6 +303,25 @@ export class DesktopService {
     } while (Date.now() < deadline);
     throw new Error('插件加载超时，请查看 NapCat 日志；QQ 登录就绪后再启动机器人。');
   }
+  async migrateLegacySpeech(list, credential, { timeoutMs = 5000, pollMs = 250 } = {}) {
+    const speech = PLUGIN_MODULES.find(plugin => plugin.module === 'speech');
+    if (!list.plugins.some(row => row.id === speech.id && row.status === 'disabled')) return list;
+    // A recorded module state means this installation has already used the new
+    // extension. In particular, never undo a user's later disable action.
+    try { await access(join(this.root, 'data/napcat-modules/speech.json')); return list; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const saved = await json(join(this.root, 'data/settings.json'), {});
+    if (saved?.speech?.enabled !== true) return list;
+    this.report({ action: 'start', step: 'plugins', message: '正在恢复已启用的语音扩展…' });
+    await this.native('Plugin/SetStatus', { id: speech.id, enable: true }, credential);
+    const deadline = Date.now() + timeoutMs;
+    do {
+      list = await this.native('Plugin/List', undefined, credential);
+      if (list.plugins.some(row => row.id === speech.id && row.status === 'active')) return list;
+      await delay(pollMs);
+    } while (Date.now() < deadline);
+    throw new Error('语音扩展未能启用，请在 NapCat 插件管理中检查语音扩展状态。');
+  }
   async start() {
     try {
       await this.assertRuntimeWorkspace();
@@ -253,6 +352,7 @@ export class DesktopService {
         await this.configure(); await this.native('Process/Restart', {}, credential); await delay(1500); credential = await this.ready(); list = await this.waitForPlugins(credential);
         if (PLUGIN_MODULES.some(plugin => !list.plugins.some(row => row.id === plugin.id))) throw new Error('插件尚未加载，请查看 NapCat 日志。');
       }
+      list = await this.migrateLegacySpeech(list, credential);
       this.report({ action: 'start', step: 'launch', message: '正在启动机器人引擎…', percent: 90 });
       await ensureEngine(this.root, process.execPath);
       const state = await this.status(); this.report({ action: 'start', done: true, ok: true }); return state;
@@ -274,6 +374,74 @@ export class DesktopService {
       this.report({ action: 'stop-bot', done: true, ok: true }); return { stopped: true };
     } catch (error) {
       this.report({ action: 'stop-bot', done: true, ok: false, error: error instanceof Error ? error.message : String(error) }); throw error;
+    }
+  }
+  async stopConflict() {
+    const stopped = [], refused = [], failures = [], attemptedPids = new Set();
+    try {
+      this.report({ action: 'stop-conflict', step: 'check', message: '正在检查占用端口的后台…', percent: 20 });
+      const conflicts = (await this.listeners()).filter(row => WATCHED_PORTS.includes(row.port) && this.isForeign(row));
+      for (const row of conflicts) {
+        if (isNapcatPath(row.path)) {
+          if (attemptedPids.has(row.pid)) continue;
+          attemptedPids.add(row.pid);
+          this.report({ action: 'stop-conflict', step: 'kill', message: `正在结束占用端口 ${row.port} 的 NapCat 后台…` });
+          try { await this.processKiller({ pid: row.pid, port: row.port, path: row.path }); stopped.push({ port: row.port, pid: row.pid, path: row.path }); }
+          catch (error) { failures.push({ ...row, error: error instanceof Error ? error.message : String(error) }); }
+        } else {
+          refused.push({ port: row.port, pid: row.pid, path: row.path, reason: `不是 QQ Agent 的 NapCat 后台，未自动结束，请手动确认后关闭：${row.path}` });
+          this.report({ action: 'stop-conflict', step: 'skip', message: `端口 ${row.port} 由其它程序占用，已跳过。` });
+        }
+      }
+      this.report({ action: 'stop-conflict', step: 'verify', message: '正在复查端口占用…', percent: 80 });
+      const remaining = (await this.listeners()).filter(row => WATCHED_PORTS.includes(row.port) && this.isForeign(row) && isNapcatPath(row.path));
+      if (failures.length) throw new Error('结束占用端口的后台失败：' + failures.map(row => `端口 ${row.port}（${row.error}）`).join('、'));
+      if (remaining.length) throw new Error('端口仍被其它 QQ Agent 的 NapCat 后台占用：' + [...new Set(remaining.map(row => row.port))].sort((a, b) => a - b).join('、') + '，请稍后重试或手动关闭。');
+      this.report({ action: 'stop-conflict', done: true, ok: true });
+      return { stopped, refused };
+    } catch (error) {
+      this.report({ action: 'stop-conflict', done: true, ok: false, error: error instanceof Error ? error.message : String(error) }); throw error;
+    }
+  }
+  async trimPorts() {
+    try {
+      this.report({ action: 'trim-ports', step: 'read', message: '正在检查端口配置…', percent: 15 });
+      const folder = join(this.root, 'tools/napcat/napcat/config'), trimmed = [], seen = new Set(); let reported = false;
+      for (const name of await this.onebotConfigFiles()) {
+        const file = join(folder, name), config = await json(file, null);
+        if (!config || typeof config !== 'object' || !config.network || typeof config.network !== 'object') continue;
+        let changed = false;
+        for (const section of INBOUND_SECTIONS) {
+          const list = config.network[section]; if (!Array.isArray(list)) continue;
+          for (const entry of list) {
+            if (!entry || typeof entry !== 'object') continue;
+            const port = Number(entry.port), keep = entry.name === 'qq-agent' && port === 3001;
+            let action = null;
+            if (!keep && entry.enable !== false) { entry.enable = false; action = 'disabled'; }
+            const wildcard = ['0.0.0.0', '::', '::0', '[::]'].includes(entry.host);
+            if (keep ? entry.host !== '127.0.0.1' : wildcard) { entry.host = '127.0.0.1'; action ||= 'loopback-only'; }
+            if (action) {
+              changed = true;
+              const record = { name: typeof entry.name === 'string' ? entry.name : '', port: Number.isFinite(port) ? port : entry.port, action }, key = `${record.name}|${record.port}|${record.action}`;
+              if (!seen.has(key)) { seen.add(key); trimmed.push(record); }
+            }
+          }
+        }
+        if (changed) {
+          if (!reported) { this.report({ action: 'trim-ports', step: 'configure', message: '正在收紧端口配置…', percent: 55 }); reported = true; }
+          await writeJSON(file, config);
+        }
+      }
+      let credential = null;
+      if (trimmed.length) { try { credential = await this.session(); } catch {} /* 本机 NapCat 未运行时配置将在下次启动生效。 */ }
+      if (credential) {
+        this.report({ action: 'trim-ports', step: 'restart', message: '正在重启 NapCat 使端口配置生效…', percent: 80 });
+        await this.native('Process/Restart', {}, credential); await delay(1500); await this.ready();
+      }
+      this.report({ action: 'trim-ports', done: true, ok: true });
+      return { trimmed, restartRequired: trimmed.length > 0 };
+    } catch (error) {
+      this.report({ action: 'trim-ports', done: true, ok: false, error: error instanceof Error ? error.message : String(error) }); throw error;
     }
   }
 }

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { constants } from 'node:fs';
 import { trustAgentPlugins } from '../napcat-plugin/local-trust.mjs';
 import { PLUGIN_MODULES } from '../napcat-plugin/catalog.mjs';
+import { pluginBuildId, versionedPluginSource } from '../napcat-plugin/versioned-source.mjs';
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 const pluginRoot = resolve(process.argv.slice(2).find(arg => !arg.startsWith('--')) || join(projectRoot, 'tools/napcat/napcat/plugins/napcat-plugin-qq-agent'));
@@ -24,11 +25,14 @@ for (const id of ['napcat-plugin-slyra', 'napcat-plugin-slyra-monitor']) {
   await rename(actual, backup);
 }
 const template = JSON.parse(await readFile(join(projectRoot, 'napcat-plugin/package.json'), 'utf8'));
+const moduleNames = ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs', 'native-config.mjs', 'speech-config.mjs'];
+const moduleSources = await Promise.all(moduleNames.map(name => readFile(join(projectRoot, 'napcat-plugin', name), 'utf8')));
+const buildId = pluginBuildId([...moduleSources, await readFile(join(projectRoot, 'napcat-plugin/webui/copy.mjs'), 'utf8')]);
 for (const plugin of PLUGIN_MODULES) {
   const target = join(pluginsRoot, plugin.id); await mkdir(target, { recursive: true });
-  for (const name of ['index.mjs', 'bridge.mjs', 'engine.mjs', 'catalog.mjs', 'bootstrap.mjs', 'native-config.mjs', 'speech-config.mjs']) await copyFile(join(projectRoot, 'napcat-plugin', name), join(target, name));
+  for (const [index, name] of moduleNames.entries()) await writeFile(join(target, name), versionedPluginSource(moduleSources[index], buildId));
   await mkdir(join(target, 'webui'), { recursive: true });
-  for (const name of ['index.html', 'app.js', 'style.css', 'copy.mjs', 'THIRD-PARTY.txt']) await copyFile(join(projectRoot, 'napcat-plugin/webui', name), join(target, 'webui', name));
+  for (const name of ['index.html', 'app.js', 'style.css', 'shell-navigation.js', 'copy.mjs', 'qlyra.png', 'THIRD-PARTY.txt']) await copyFile(join(projectRoot, 'napcat-plugin/webui', name), join(target, 'webui', name));
   await writeFile(join(target, 'package.json'), JSON.stringify({ ...template, name: plugin.id, plugin: plugin.name, description: plugin.description }, null, 2));
   await writeFile(join(target, 'deployment.json'), JSON.stringify({ projectRoot, pluginId: plugin.id, nodeBinary: process.execPath }), { mode: 0o600 });
 }

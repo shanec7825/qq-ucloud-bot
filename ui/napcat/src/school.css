@@ -1,0 +1,66 @@
+.school-workspace{--school-surface:var(--ui-surface,var(--qa-surface,hsl(var(--heroui-content1))));--school-line:var(--ui-line,var(--qa-line,hsl(var(--heroui-default-200)/.8)));--school-muted:var(--ui-muted,var(--qa-muted,hsl(var(--heroui-default-600))));--school-accent:var(--ui-accent-ink,var(--qa-accent-ink,hsl(var(--heroui-primary-600))));display:grid;gap:20px;min-width:0;color:hsl(var(--heroui-foreground))}
+.school-topbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;min-width:0}
+.school-tabs{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:5px;border:1px solid var(--school-line);border-radius:15px;background:hsl(var(--heroui-default-100)/.5);min-width:0;max-width:100%}
+.school-tabs>button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:9px 14px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--school-muted);font:inherit;font-size:13px;line-height:1.4;cursor:pointer;transition:background-color 150ms,color 150ms,border-color 150ms;touch-action:manipulation}
+.school-tabs>button[aria-selected=true]{color:var(--school-accent);background:var(--school-surface);border-color:hsl(var(--heroui-primary)/.25);box-shadow:0 2px 7px hsl(var(--heroui-primary)/.07);font-weight:600}
+.school-tabs>button:hover:not(:disabled){color:var(--school-accent);background:hsl(var(--heroui-primary)/.06)}
+.school-tabs>button:disabled{opacity:.45;cursor:not-allowed}
+.school-tabs>button:focus-visible,.school-external:focus-visible,.school-record:focus-visible,.school-complete-link:focus-visible{outline:2px solid hsl(var(--heroui-focus));outline-offset:3px}
+.school-external{display:inline-flex;align-items:center;gap:7px;min-height:44px;margin-left:auto;color:var(--school-muted);font-size:12px;text-decoration:none;white-space:nowrap}
+.school-external:hover{color:var(--school-accent)}
+.school-panel,.school-connection{min-width:0}
+.school-connection{display:grid;gap:18px}
+.school-toolbar{display:flex;align-items:center;gap:12px;min-width:0;margin-bottom:16px}
+.school-search{max-width:340px;min-width:0;flex:1}
+.school-result-count{margin-left:auto;color:var(--school-muted);font-size:12px;line-height:1.5;white-space:nowrap;font-variant-numeric:tabular-nums}
+.school-refresh{flex-shrink:0;min-width:44px!important;min-height:44px!important;color:var(--school-muted)}
+.school-reader-grid{display:grid;grid-template-columns:minmax(240px,.95fr) minmax(0,1.25fr);min-height:360px;border:1px solid var(--school-line);border-radius:17px;background:var(--school-surface);overflow:hidden}
+.school-list-pane{min-width:0;max-height:620px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.school-records{list-style:none;margin:0;padding:8px}
+.school-records>li+li{margin-top:5px}
+.school-record-entry{border:1px solid var(--school-line);border-radius:12px;overflow:hidden}
+.school-record-action{display:inline-flex;align-items:center;gap:7px;min-height:44px;margin:0 12px 10px;padding:7px 12px;border:1px solid hsl(var(--heroui-primary)/.2);border-radius:9px;background:hsl(var(--heroui-primary)/.07);color:var(--school-accent);font-size:12px;font-weight:600;text-decoration:none}
+.school-record-action:hover{background:hsl(var(--heroui-primary)/.13)}
+.school-record-action:focus-visible{outline:2px solid hsl(var(--heroui-focus));outline-offset:2px}
+.school-record{display:flex;align-items:flex-start;gap:11px;width:100%;min-height:92px;padding:16px 12px;border:1px solid transparent;border-radius:11px;background:transparent;color:inherit;text-align:left;cursor:pointer;touch-action:manipulation;transition:background-color 150ms,border-color 150ms}
+.school-record:hover{background:hsl(var(--heroui-primary)/.035)}
+.school-record[aria-pressed=true]{background:hsl(var(--heroui-primary)/.075);border-color:hsl(var(--heroui-primary)/.2)}
+.school-record>.ui-icon{margin-top:9px;margin-left:auto;color:var(--school-muted);opacity:.7}
+.school-record-icon{display:grid;place-items:center;flex-shrink:0;width:32px;height:32px;border-radius:10px;background:hsl(var(--heroui-primary)/.08);color:var(--school-accent)}
+.school-record-main{display:grid;gap:7px;min-width:0;flex:1}
+.school-record-title{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 7px;font-size:14px;font-weight:600;line-height:1.6;overflow-wrap:anywhere}
+.school-record-course,.school-record-time{display:flex;flex-wrap:wrap;align-items:center;gap:5px 9px;color:var(--school-muted);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.school-task-type{font-size:11px;border:1px solid var(--school-line);padding:0 5px;border-radius:4px}
+.school-deadline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;color:var(--school-muted);font-size:12px;line-height:1.7;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.school-deadline>.ui-icon{margin-top:2px}
+.school-deadline.overdue{color:hsl(var(--heroui-warning-600))}
+.school-overdue{font-size:11px;font-weight:500}
+.school-unread{display:inline-flex;align-items:center;gap:4px;color:var(--school-accent);font-size:11px;font-weight:500}
+.school-unread:before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor}
+.school-detail-pane{min-width:0;padding:26px;border-left:1px solid var(--school-line);background:linear-gradient(150deg,hsl(var(--heroui-primary)/.025),transparent 55%)}
+.school-detail-heading{display:grid;gap:10px;min-width:0;padding-bottom:23px;margin-bottom:23px;border-bottom:1px solid var(--school-line)}
+.school-detail-eyebrow{font-size:12px;line-height:1.6;color:var(--school-accent);overflow-wrap:anywhere}
+.school-detail-heading h3{margin:0;font-size:19px;font-weight:600;line-height:1.55;overflow-wrap:anywhere}
+.school-detail-heading h3:focus{outline:none}
+.school-detail-heading h3:focus-visible{outline:2px solid hsl(var(--heroui-focus));outline-offset:5px;border-radius:4px}
+.school-detail-content{font-size:14px;line-height:1.95;white-space:pre-wrap;overflow-wrap:anywhere}
+.school-detail-back{display:none!important}
+.school-complete-link{display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:20px;padding:9px 16px;border:1px solid hsl(var(--heroui-primary)/.25);border-radius:10px;background:hsl(var(--heroui-primary)/.09);color:var(--school-accent);font-size:14px;font-weight:600;text-decoration:none}
+.school-complete-link:hover{background:hsl(var(--heroui-primary)/.16)}
+.school-reader-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:270px;padding:30px 20px;color:var(--school-muted);text-align:center;min-width:0}
+.school-state-icon{display:grid;place-items:center;width:50px;height:50px;border-radius:16px;color:var(--school-accent);background:hsl(var(--heroui-primary)/.075)}
+.school-state-title{margin:0;font-size:14px;line-height:1.65;font-weight:500;color:hsl(var(--heroui-foreground));overflow-wrap:anywhere}
+.school-state-message{max-width:360px;margin:0;font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.school-reader-state.is-error .school-state-icon{color:hsl(var(--heroui-danger-600));background:hsl(var(--heroui-danger)/.07)}
+.school-reader-state.is-error .school-state-message{color:hsl(var(--heroui-danger-600))}
+.school-state-icon.is-loading>.ui-icon{animation:school-loading 1.4s linear infinite}
+.school-detail-pane>.school-reader-state{min-height:230px;padding:20px 0}
+.school-pagination{display:flex;justify-content:center;align-items:center;gap:15px;margin-top:18px;min-width:0}
+.school-pagination>span{font-size:12px;line-height:1.7;color:var(--school-muted);font-variant-numeric:tabular-nums;text-align:center}
+.school-pagination>button{min-height:44px}
+.school-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@keyframes school-loading{to{transform:rotate(360deg)}}
+@media(max-width:1000px){.school-topbar{gap:5px 12px}.school-tabs{flex:1}.school-tabs>button{padding:9px 10px}.school-external{font-size:11px}.school-reader-grid{grid-template-columns:minmax(215px,.95fr) minmax(0,1.1fr)}.school-detail-pane{padding:22px}.school-record{padding:14px 9px;gap:9px}.school-record-icon{width:28px;height:28px;border-radius:8px}}
+@media(max-width:760px){.school-workspace{gap:15px}.school-tabs{width:100%;justify-content:space-between}.school-tabs>button{flex:1;padding:9px 7px;gap:6px;font-size:12px}.school-topbar{gap:2px}.school-external{min-height:36px}.school-toolbar{gap:8px}.school-result-count{font-size:11px}.school-reader-grid{display:block;min-height:270px}.school-list-pane{max-height:none}.school-detail-pane{display:none;border-left:0;padding:20px}.school-reader-grid.has-selection .school-list-pane{display:none}.school-reader-grid.has-selection .school-detail-pane{display:block}.school-detail-back{display:inline-flex!important;margin:-6px 0 18px -10px;min-height:44px}.school-record{min-height:88px;padding:15px 12px}.school-record-title{font-size:14px}.school-record-icon{width:32px;height:32px}.school-reader-state{min-height:250px}.school-detail-heading h3{font-size:18px}.school-page-total{display:none}.school-pagination{gap:10px}.school-pagination>button{padding-left:12px;padding-right:12px}}
+@media(max-width:390px){.school-tabs>button{gap:4px;padding:9px 5px}.school-tabs>button>.ui-icon{width:14px;height:14px}.school-tabs{gap:2px;padding:4px}.school-record>.ui-icon{display:none}.school-result-count{display:none}.school-detail-pane{padding:18px}}
+@media(prefers-reduced-motion:reduce){.school-tabs>button,.school-record{transition:none}.school-state-icon.is-loading>.ui-icon{animation:none}}

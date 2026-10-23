@@ -5,6 +5,7 @@ import { imageDimensions, fetchImage, stickerURL } from './message-media.mjs';
 import { segments } from './message-content.mjs';
 
 export const IMAGE_LIMIT = 8 * 1024 * 1024;
+export const MEDIA_ITEM_LIMIT = 1000;
 const validId = value => typeof value === 'string' && /^[a-f0-9]{32}$/.test(value);
 export function decodeBase64(value, limit = IMAGE_LIMIT) {
   if (typeof value !== 'string' || !value || value.length > Math.ceil(limit / 3) * 4 || value.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) throw new Error('文件编码无效或文件过大。');
@@ -23,7 +24,7 @@ export function imageType(bytes) {
   return type;
 }
 export function mediaScope(input) {
-  if (!input || typeof input.accountId !== 'string' || !/^[A-Za-z0-9_-]{1,40}$/.test(input.accountId) || !['account','group','private'].includes(input.kind) || (input.kind === 'account' ? input.targetId !== '' : !/^\d{5,15}$/.test(input.targetId))) throw new Error('请选择有效的 QQ 账号和素材使用范围。');
+  if (!input || typeof input.accountId !== 'string' || !(input.accountId === '*' && input.kind === 'account' || /^[A-Za-z0-9_-]{1,40}$/.test(input.accountId)) || !['account','group','private'].includes(input.kind) || (input.kind === 'account' ? input.targetId !== '' : !/^\d{5,15}$/.test(input.targetId))) throw new Error('请选择有效的素材使用范围。');
   return `${input.accountId}:${input.kind}:${input.targetId}`;
 }
 const eventScope = event => ({ accountId: event.accountId || 'default', kind: event.message_type, targetId: String(event.message_type === 'group' ? event.group_id : event.user_id) });
@@ -35,7 +36,7 @@ export class OutgoingMedia {
   async list() { return readJSON(this.index, []); }
   async available(event) {
     const scope = mediaScope(eventScope(event)), shared = `${event.accountId || 'default'}:account:`;
-    return (await this.list()).filter(item => item.scope === scope || item.scope === shared);
+    return (await this.list()).filter(item => item.scope === scope || item.scope === shared || item.scope === '*:account:');
   }
   mutate(work) { const pending = this.queue.catch(() => {}).then(work); this.queue = pending; return pending; }
   put(input) {
@@ -43,8 +44,9 @@ export class OutgoingMedia {
       const scope = mediaScope(input);
       if (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 60 || /[\x00-\x1f]/.test(input.name) || !['image','sticker'].includes(input.type)) throw new Error('请填写 1–60 字名称，并选择图片或表情包。');
       const bytes = decodeBase64(input.base64), mime = imageType(bytes), rows = await this.list();
-      if (rows.length >= 200 || rows.reduce((sum, row) => sum + row.size, 0) + bytes.length > 200 * 1024 * 1024) throw new Error('素材库已达到 200 个或 200MB 上限，请先移除不需要的素材。');
+      if (rows.length >= MEDIA_ITEM_LIMIT || rows.reduce((sum, row) => sum + row.size, 0) + bytes.length > 200 * 1024 * 1024) throw new Error(`素材库已达到 ${MEDIA_ITEM_LIMIT} 个或 200MB 上限，请先移除不需要的素材。`);
       const item = { id: randomUUID().replaceAll('-', ''), scope, accountId: input.accountId, kind: input.kind, targetId: input.targetId, name: input.name.trim(), type: input.type, mime, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), createdAt: new Date().toISOString() };
+      if (input.source) item.source = structuredClone(input.source);
       await mkdir(this.root, { recursive: true });
       const file = new URL(item.id, this.root);
       await writeFile(file, bytes, { flag: 'wx', mode: 0o600 });

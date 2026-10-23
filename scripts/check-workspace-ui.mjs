@@ -124,7 +124,7 @@ try {
     ],
   }));
   await home.locator('.check-row').first().waitFor();
-  assert.equal(await home.locator('.check-row').count(), 7, 'system 5 rows + components 2 rows');
+  assert.equal(await home.locator('.check-row').count(), 8, 'system 5 rows + components 3 rows (mimo falls back when missing)');
   assert.equal(await home.locator('a[href="https://developer.microsoft.com/microsoft-edge/webview2/"]').count(), 1, 'webview2 failure links the official download');
   await home.screenshot({ path: 'data/desktop-home-status.png', fullPage: true });
   // Old-field subsets still render gracefully as 未知/未检测 without errors.
@@ -151,6 +151,52 @@ try {
   // 12s status poll completions never disturb the wizard.
   await home.evaluate(() => window.renderProgress({ action: 'status', done: true, ok: true }));
   assert.equal(await home.evaluate(() => [...document.querySelectorAll('.actions button')].every(button => !button.disabled)), true);
+  // Protocol v2: three runtime components with a settings shortcut, conflict recovery and the ports card.
+  await home.evaluate(() => window.renderStatus({
+    workspace: 'D:\\fixture', workspaceError: '6099 端口由其它工作区占用。',
+    conflict: { owners: ['C:\\other\\tools\\napcat\\napcat.exe'], ports: [6099] },
+    components: [
+      { id: 'napcat', ok: true, version: 'NapCat 4.x', detail: '已安装' },
+      { id: 'codex', ok: true, version: 'Codex CLI', detail: 'ChatGPT Plus 已登录', optional: true },
+      { id: 'mimo', ok: true, version: 'MiMo v2.6', detail: '已配置 Token Plan Key', optional: true },
+    ],
+    ports: [
+      { port: 6099, label: 'NapCat WebUI', role: 'required' },
+      { port: 3001, label: 'OneBot', role: 'required' },
+      { port: 6100, label: '管理接口', role: 'required', detail: '本机管理服务' },
+      { port: 7000, label: '调试端口', role: 'extra' },
+      { port: 5600, label: '其它工作区', role: 'foreign', detail: '被 napcat.exe 占用' },
+    ],
+  }));
+  await home.locator('.check-row').first().waitFor();
+  assert.equal(await home.locator('.check-row').count(), 13, 'system 5 + components 3 + ports 5 rows');
+  await home.screenshot({ path: 'data/desktop-home-v2.png', fullPage: true });
+  for (const width of [375, 1440]) for (const colorScheme of ['light', 'dark']) {
+    await home.setViewportSize({ width, height: 1000 }); await home.emulateMedia({ colorScheme });
+    assert.equal(await home.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `v2 ${width} ${colorScheme} overflow`);
+  }
+  await home.setViewportSize({ width: 1440, height: 1000 }); await home.emulateMedia({ colorScheme: 'light' });
+  assert.equal(await home.getByRole('button', { name: '去配置' }).count(), 1, 'mimo row opens the plugin settings page');
+  await home.getByRole('button', { name: '去配置' }).click();
+  assert.equal(await home.evaluate(() => window.lastAction), 'settings');
+  // Conflict: red feedback plus the stop-conflict primary action; busy until its closing done event.
+  await home.locator('.feedback.error').filter({ hasText: '其它工作区的 NapCat 正在占用端口 6099' }).waitFor();
+  await home.getByRole('button', { name: '关闭其它后台并继续' }).click();
+  assert.equal(await home.evaluate(() => window.lastAction), 'stop-conflict');
+  await home.waitForFunction(() => [...document.querySelectorAll('.actions button')].every(button => button.disabled));
+  await home.evaluate(() => window.renderProgress({ action: 'stop-conflict', message: '已关闭其它后台', done: true, ok: true }));
+  await home.waitForFunction(() => [...document.querySelectorAll('.actions button')].every(button => !button.disabled));
+  // Ports card actions: trim extra listeners and stop the foreign workspace.
+  await home.getByRole('button', { name: '关闭多余端口' }).click();
+  assert.equal(await home.evaluate(() => window.lastAction), 'trim-ports');
+  await home.evaluate(() => window.renderProgress({ action: 'trim-ports', message: '已关闭多余端口', done: true, ok: true }));
+  await home.getByRole('button', { name: '关闭其它后台', exact: true }).click();
+  assert.equal(await home.evaluate(() => window.lastAction), 'stop-conflict');
+  await home.evaluate(() => window.renderProgress({ action: 'stop-conflict', message: '已关闭', done: true, ok: true }));
+  await home.waitForFunction(() => [...document.querySelectorAll('.actions button')].every(button => !button.disabled));
+  // Missing ports data degrades to 未检测 without errors.
+  await home.evaluate(() => window.renderStatus({}));
+  assert.equal(await home.locator('.ports-card .empty-label').textContent(), '未检测');
   await home.close();
   assert.deepEqual(errors, []); console.log('Workspace browser checks passed: profiles/bind/guard/reload, metadata/scope/filter/drafts, inbox opaque IDs/status/source persistence, all 6 pages at 375/1440 light/dark and all 5 mocked NapCat modules. No QQ/model calls.');
 } finally { await browser?.close(); runtime?.stop(); await admin?.close(); await rm(folder, { recursive: true, force: true }); }

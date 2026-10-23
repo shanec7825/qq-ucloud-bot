@@ -1,3 +1,4 @@
+import { confirmAction } from './confirm.js';
 import React, { useEffect, useState } from 'react';
 import { Button } from '@heroui/button';
 import { Input, Textarea } from '@heroui/input';
@@ -18,63 +19,69 @@ export async function bridgeRequest(method, path, value) {
 }
 
 export function PersonaWorkspace({ onDirtyChange, onBusyChange, onSaved, onAssign }) {
-  const [settings, setSettings] = useState(null), [selected, setSelected] = useState('new'), [name, setName] = useState(''), [prompt, setPrompt] = useState('');
+  const globalId = '@global';
+  const [settings, setSettings] = useState(null), [selected, setSelected] = useState(globalId), [name, setName] = useState(''), [prompt, setPrompt] = useState('');
   const [query, setQuery] = useState(''), [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState(false);
   const mark = value => { setDirty(value); onDirtyChange(value); setMessage(''); };
-  useEffect(() => { let active = true; bridgeRequest('GET','state').then(result => { if(active) { setSettings(result.settings); const first=result.settings.profiles[0]; if(first){setSelected(first.id);setName(first.name);setPrompt(first.systemPrompt);} } }).catch(e => { if(active) { setError(true); setMessage(e.message); } }); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; bridgeRequest('GET','state').then(result => { if(active) { setSettings(result.settings); setName(result.settings.bot.name); setPrompt(result.settings.bot.systemPrompt); } }).catch(e => { if(active) { setError(true); setMessage(e.message); } }); return () => { active = false; }; }, []);
+  const isGlobal = selected === globalId;
   const profile = settings?.profiles.find(p => p.id === selected);
-  const uses = settings ? settings.groups.filter(g=>g.profileId===selected).length + settings.bindings.filter(b=>b.profileId===selected).length + settings.accounts.filter(a=>a.defaultProfileId===selected).length : 0;
+  const uses = settings ? settings.groups.filter(g=>g.profileId===selected).length + settings.bindings.filter(b=>b.profileId===selected).length + settings.accounts.filter(a=>a.defaultProfileId===selected).length + (settings.chat?.memoryContacts.filter(contact=>contact.profileId===selected).length || 0) : 0;
   function choose(p) {
-    if (dirty && !confirm('放弃未保存的修改？')) return;
-    setSelected(p?.id || 'new'); setName(p?.name || ''); setPrompt(p?.systemPrompt || ''); if(!p)setQuery(''); mark(false);
+    if (dirty && !confirmAction('放弃未保存的修改？')) return;
+    setSelected(p?.id || 'new'); setName(p?.name || ''); setPrompt(p?.systemPrompt || ''); if(!p)setQuery(''); mark(false);setError(false);
   }
   async function reload() {
-    if(dirty&&!confirm('放弃未保存的修改？'))return;
+    if(dirty&&!confirmAction('放弃未保存的修改？'))return;
     setBusy(true);onBusyChange(true);setMessage('');setError(false);
-    try{const fresh=(await bridgeRequest('GET','state')).settings,p=fresh.profiles.find(p=>p.id===selected)||fresh.profiles[0];setSettings(fresh);setSelected(p?.id||'new');setName(p?.name||'');setPrompt(p?.systemPrompt||'');setDirty(false);onDirtyChange(false);await onSaved(p?.id||'new');}
+    try{const fresh=(await bridgeRequest('GET','state')).settings,p=isGlobal?{id:globalId,...fresh.bot}:fresh.profiles.find(p=>p.id===selected);setSettings(fresh);setSelected(p?.id||'new');setName(p?.name||'');setPrompt(p?.systemPrompt||'');setDirty(false);onDirtyChange(false);await onSaved(p?.id===globalId?'new':p?.id||'new');}
     catch(e){setError(true);setMessage(e.message);}
     finally{setBusy(false);onBusyChange(false);}
   }
   async function save(remove = false) {
     if (!settings || busy) return;
-    if (remove && (!profile || !confirm('删除“' + profile.name + '”？'))) return;
+    if (remove && (!profile || !confirmAction('删除“' + profile.name + '”？'))) return;
     if (!remove && !name.trim()) { setError(true); setMessage('请填写名称。'); return; }
     setBusy(true); onBusyChange(true); setError(false); setMessage('');
     try {
-      const id = profile?.id || crypto.randomUUID().replaceAll('-','');
+      const id = isGlobal ? globalId : profile?.id || crypto.randomUUID().replaceAll('-','');
       const next = structuredClone(settings);
-      if (remove) next.profiles = next.profiles.filter(p=>p.id!==selected);
+      if (isGlobal) next.bot = {...next.bot,name:name.trim(),systemPrompt:prompt};
+      else if (remove) next.profiles = next.profiles.filter(p=>p.id!==selected);
       else { const record = {...(profile || {model:''}),id,name:name.trim(),systemPrompt:prompt}; const index=next.profiles.findIndex(p=>p.id===id); if(index<0)next.profiles.push(record); else next.profiles[index]=record; }
       const result = await bridgeRequest('PUT','settings',{settings:next,revision:settings.revision});
       const fresh = result.settings || (await bridgeRequest('GET','state')).settings;
-      setSettings(fresh); setSelected(remove?'new':id); setName(remove?'':fresh.profiles.find(p=>p.id===id)?.name||name); if(remove)setPrompt(''); setDirty(false); onDirtyChange(false);
-      await onSaved(remove?'new':id); setMessage(remove?'已删除':'已保存');
+      setSettings(fresh); setSelected(remove?'new':id); setName(remove?'':isGlobal?fresh.bot.name:fresh.profiles.find(p=>p.id===id)?.name||name); if(remove)setPrompt(''); setDirty(false); onDirtyChange(false);
+      await onSaved(remove||isGlobal?'new':id); setMessage(remove?'已删除':'已保存');
     } catch(e) { setError(true); setMessage(e.message); }
     finally { setBusy(false); onBusyChange(false); }
   }
   return <div className="persona-workspace">
     <section className="persona-library" aria-label="角色列表">
-      <div className="library-heading"><h2>角色<span className="record-count">{settings?.profiles.length || 0}</span></h2><Button size="sm" variant="light" className="new-record" startContent={<Icon name="plus"/>} isDisabled={busy || !settings} onPress={()=>choose()}>新建</Button></div>
+      <div className="library-heading"><h2>角色<span className="record-count">{settings ? settings.profiles.length + 1 : 0}</span></h2><Button size="sm" variant="light" className="new-record" startContent={<Icon name="plus"/>} isDisabled={busy || !settings} onPress={()=>choose()}>新建</Button></div>
       <Input {...searchStyle} size="sm" aria-label="搜索角色" placeholder="搜索角色" value={query} onValueChange={setQuery}/>
-      <div className="persona-list">{settings?.profiles.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())).map(p=><button type="button" key={p.id} className="persona-row" aria-pressed={selected===p.id} onClick={()=>choose(p)} disabled={busy}><span className="persona-avatar" aria-hidden="true">{[...p.name][0]}</span><span className="min-w-0 break-words">{p.name}</span></button>)}</div>
-      {settings && !settings.profiles.length && <p className="text-small text-default-500">还没有角色</p>}
+      <div className="persona-list">
+        {settings && ('默认全局角色 '+settings.bot.name).toLowerCase().includes(query.toLowerCase()) && <button type="button" className="persona-row global-role" aria-pressed={isGlobal} onClick={()=>choose({id:globalId,...settings.bot})} disabled={busy}><span className="persona-avatar"><Icon name="globe"/></span><span className="min-w-0"><span className="block">默认全局角色</span><span className="record-description">{settings.bot.name}</span></span></button>}
+        {settings?.profiles.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())).map(p=><button type="button" key={p.id} className="persona-row" aria-pressed={selected===p.id} onClick={()=>choose(p)} disabled={busy}><span className="persona-avatar" aria-hidden="true">{[...p.name][0]}</span><span className="min-w-0 break-words">{p.name}</span></button>)}
+      </div>
+      {settings && !('默认全局角色 '+settings.bot.name).toLowerCase().includes(query.toLowerCase()) && !settings.profiles.some(p=>p.name.toLowerCase().includes(query.toLowerCase())) && <p className="empty-label">没有匹配角色</p>}
     </section>
     <section className="persona-editor" aria-label="角色编辑">
-      <div className="persona-heading"><h2 className="editor-title">{selected==='new'?'新建角色':profile?.name || '编辑角色'}</h2>{profile && uses>0 && <span className="usage-label">{uses} 处使用中</span>}</div>
+      <div className="persona-heading"><h2 className="editor-title">{isGlobal?'默认全局角色':selected==='new'?'新建角色':profile?.name || '编辑角色'}</h2>{isGlobal?<span className="role-scope"><Icon name="globe"/>未指定角色时使用</span>:profile && uses>0 && <span className="usage-label">{uses} 处使用中</span>}</div>
       <div className="persona-fields"><Input {...fieldStyle} label="名称" aria-label="名称" value={name} maxLength={40} isDisabled={busy || !settings} onValueChange={v=>{setName(v);mark(true);}}/>
       <Textarea {...fieldStyle} className="prompt-field" label="系统提示词" aria-label="系统提示词" placeholder="自由描述身份、性格、语气和回答方式。" minRows={9} maxRows={24} maxLength={12000} value={prompt} isDisabled={busy || !settings} onValueChange={v=>{setPrompt(v);mark(true);}}/></div>
       <p role="status" className={'feedback '+(error?'error':'success')}>{message}</p>
-      <div className="editor-actions"><Button color="primary" isLoading={busy} isDisabled={!settings || busy} onPress={()=>save()}>保存角色</Button><Button variant="flat" isDisabled={!profile || busy || dirty} onPress={()=>onAssign(selected)}>分配角色</Button><Button variant="light" startContent={<Icon name="refresh"/>} isDisabled={busy} onPress={reload}>刷新</Button>{dirty && <span className="dirty-indicator">未保存</span>}<Button className="remove-action" variant="light" color="danger" startContent={<Icon name="trash"/>} isDisabled={!profile || busy || uses>0} onPress={()=>save(true)}>删除角色</Button></div>
+      <div className="editor-actions"><Button color="primary" startContent={<Icon name="check"/>} isLoading={busy} isDisabled={!settings || busy} onPress={()=>save()}>保存角色</Button>{!isGlobal&&<Button variant="flat" isDisabled={!profile || busy || dirty} onPress={()=>onAssign(selected)}>分配角色</Button>}<Button variant="light" startContent={<Icon name="refresh"/>} isDisabled={busy} onPress={reload}>刷新</Button>{dirty && <span className="dirty-indicator">未保存</span>}{!isGlobal&&<Button className="remove-action" variant="light" color="danger" startContent={<Icon name="trash"/>} isDisabled={!profile || busy || uses>0} onPress={()=>save(true)}>删除角色</Button>}</div>
     </section>
   </div>;
 }
 
-export function ContactPicker({ label, value, onChange, accountId, multiple = false, kind = 'friends', disabled, description }) {
+export function ContactPicker({ label, value, onChange, accountId, all = false, multiple = false, kind = 'friends', disabled, description }) {
   const [rows, setRows] = useState(null), [query, setQuery] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const selected = String(value || '').split(/[,，]/).map(x => x.trim()).filter(Boolean);
   async function load() {
     setBusy(true); setError('');
-    try { const result = await bridgeRequest('POST', 'qq/contacts', { accountId }); setRows(result[kind] || []); setError((result.errors || []).join(' ')); }
+    try { const result = await bridgeRequest('POST', 'qq/contacts', all ? { all: true } : { accountId }); setRows(result[kind] || []); setError((result.errors || []).join(' ')); }
     catch (e) { setRows(null); setError(e.message); }
     finally { setBusy(false); }
   }

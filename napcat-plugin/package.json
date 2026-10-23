@@ -1,11 +1,11 @@
 {
   "name": "napcat-plugin-qq-agent",
-  "plugin": "QQ Agent · 机器人核心",
-  "version": "2.2.0",
+  "plugin": "Qlyra · chat",
+  "version": "2.6.1",
   "description": "通用 QQ AI 机器人核心，昵称与插件名称分开配置。",
   "type": "module",
   "main": "index.mjs",
-  "author": "QQ Agent contributors",
+  "author": "Qlyra contributors",
   "napcat": {
     "minVersion": "4.14.0"
   }

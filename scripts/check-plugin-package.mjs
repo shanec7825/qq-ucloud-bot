@@ -7,7 +7,7 @@ import { PLUGIN_MODULES } from '../napcat-plugin/catalog.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url)), pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 await mkdir(join(root, 'data'), { recursive: true }); const folder = await mkdtemp(join(root, 'data/plugin-package-'));
 try {
-  const bundle = unzipSync(await readFile(join(root, `release/${pkg.version}/QQ-Agent-Plugins-${pkg.version}-win-x64.zip`)));
+  const bundle = unzipSync(await readFile(join(root, `release/${pkg.version}/Qlyra-Plugins-${pkg.version}-win-x64.zip`)));
   for (const [name, bytes] of Object.entries(bundle)) {
     const target = resolve(folder, name); assert.ok(target.startsWith(folder + sep));
     await mkdir(dirname(target), { recursive: true }); await writeFile(target, bytes);
@@ -17,7 +17,7 @@ try {
     const meta = JSON.parse(Buffer.from(files['package.json']).toString()), deployment = JSON.parse(Buffer.from(files['deployment.json']).toString());
     assert.equal(meta.name, plugin.id); assert.equal(meta.version, pkg.version); assert.equal(deployment.projectRoot, undefined); assert.equal(deployment.nodeBinary, undefined);
     assert.ok(files['index.mjs']); assert.ok(files['native-config.mjs']); assert.ok(files['speech-config.mjs']);
-    for (const name of ['index.html', 'app.js', 'style.css', 'copy.mjs', 'THIRD-PARTY.txt']) assert.ok(files['webui/' + name]);
+    for (const name of ['index.html', 'app.js', 'style.css', 'shell-navigation.js', 'copy.mjs', 'qlyra.png', 'THIRD-PARTY.txt']) assert.ok(files['webui/' + name]);
     assert.ok(!Object.keys(files).some(name => name.startsWith('data/')));
   }
   const core = join(folder, 'napcat-plugin-qq-agent'), bootstrap = await import(pathToFileURL(join(core, 'bootstrap.mjs')));

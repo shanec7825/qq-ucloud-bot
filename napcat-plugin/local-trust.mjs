@@ -10,7 +10,12 @@ export function trustAgentPlugins(source) {
     const matches = [...source.matchAll(pattern)]; if (matches.length !== 1) continue;
     if (pattern === current) {
       const ids = JSON.parse(matches[0][0].match(/\[[^\]]+\]/)[0]).sort().join(',');
-      if (ids !== ['napcat-plugin-slyra', 'napcat-plugin-slyra-monitor'].sort().join(',') && ids !== PLUGIN_MODULES.map(item => item.id).sort().join(',')) throw new Error('加载器包含其他本机信任项，未覆盖。');
+      const knownVersions = [
+        ['napcat-plugin-slyra', 'napcat-plugin-slyra-monitor'],
+        ['napcat-plugin-qq-agent', 'napcat-plugin-agent-github', 'napcat-plugin-agent-drive', 'napcat-plugin-agent-ucloud', 'napcat-plugin-agent-notices'],
+        PLUGIN_MODULES.map(item => item.id),
+      ];
+      if (!knownVersions.some(version => [...version].sort().join(',') === ids)) throw new Error('加载器包含其他本机信任项，未覆盖。');
     }
     return source.replace(pattern, replacement);
   }

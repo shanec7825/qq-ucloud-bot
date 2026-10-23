@@ -158,3 +158,52 @@ main,form,#fields{width:100%}
 .media-preview{width:100%;height:200px;object-fit:contain;border-radius:8px}.media-card-actions{display:flex;gap:10px}
 .speech-preview{margin-top:28px;padding-top:22px;border-top:1px solid hsl(var(--heroui-divider))}.speech-preview audio{width:100%;max-width:420px}
 @media(max-width:600px){.media-fields{grid-template-columns:1fr}.media-upload{padding:14px}}
+
+/* Grouped workspace navigation: functions are buttons, never external links. */
+.settings-main{--settings-accent:var(--qa-accent-ink);max-width:1320px;display:grid;grid-template-columns:172px minmax(0,1fr);align-items:start;gap:24px;padding:24px}
+.workspace-navigation{position:sticky;top:16px;min-width:0;padding:10px 0}
+.navigation-brand{display:flex;align-items:center;gap:9px;padding:0 12px 20px;font-size:15px;font-weight:700;color:var(--settings-accent)}
+.navigation-brand img{display:block;flex-shrink:0;object-fit:contain;border-radius:8px}
+.page-tabs{display:flex;flex-direction:column;gap:20px;padding:0;border:0;border-radius:0;background:transparent}
+.navigation-group{display:flex;flex-direction:column;gap:4px;min-width:0}
+.navigation-group-label{padding:0 12px 6px;font-size:11px;color:var(--settings-muted)}
+.page-tabs button{display:flex;align-items:center;gap:10px;justify-content:flex-start;width:100%;min-height:42px;height:auto;padding:10px 12px;font-size:13px;text-align:left;border:1px solid transparent;border-radius:10px!important}
+.page-tabs button[aria-selected=true]{color:var(--settings-accent);background:hsl(var(--heroui-primary)/.1);border-color:hsl(var(--heroui-primary)/.13);box-shadow:none}
+.page-tabs button:disabled{opacity:.55;cursor:wait}
+.workspace-content{display:flex;flex-direction:column;gap:22px;min-width:0}
+.workspace-heading{display:flex;gap:14px;align-items:center;min-width:0;padding:2px 0 4px}
+.workspace-heading-icon{display:grid;place-items:center;flex:0 0 48px;width:48px;height:48px;border-radius:15px;color:var(--settings-accent);background:linear-gradient(140deg,hsl(var(--heroui-primary)/.16),color-mix(in srgb,var(--qa-violet) 12%,transparent));border:1px solid hsl(var(--heroui-primary)/.1)}
+.workspace-heading h1{font-size:23px;line-height:1.4;font-weight:700;letter-spacing:-.025em;margin:0}
+.workspace-heading p{font-size:13px;line-height:1.6;color:var(--settings-muted);margin:4px 0 0;max-width:62ch}
+.settings-main .single-workspace{max-width:none}
+.role-scope{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--settings-muted)}
+.global-role{margin-bottom:12px;border-bottom:1px solid var(--settings-line)}
+.settings-main button.bg-primary{background:var(--qa-accent-solid);color:#fff}
+.settings-main .feedback:empty{display:none}
+.single-navigation{display:none}
+.settings-main.standalone-workspace{grid-template-columns:minmax(0,1fr);max-width:1160px}
+.navigation-group>summary{display:flex;align-items:center;gap:10px;padding:13px 12px;color:hsl(var(--heroui-default-500));list-style:none}
+.navigation-group>summary::-webkit-details-marker{display:none}
+.navigation-group[open]>summary{color:hsl(var(--heroui-primary))}
+.settings-main:has(.single-navigation){grid-template-columns:minmax(0,1fr);max-width:1160px}
+.settings-main:not(:has(.workspace-content)){display:block}
+@media(max-width:900px){
+  .settings-main{grid-template-columns:142px minmax(0,1fr);gap:16px;padding:18px}
+  .record-workspace,.persona-workspace{grid-template-columns:190px minmax(0,1fr)}
+  .record-editor,.persona-editor{padding:22px}
+}
+@media(max-width:720px){
+  .settings-main{grid-template-columns:minmax(0,1fr);gap:18px;padding:16px}
+  .workspace-navigation{position:static;padding:0}
+  .navigation-brand,.navigation-group-label{display:none}
+  .page-tabs{flex-direction:row;gap:8px;overflow-x:auto;padding:4px 2px 8px;scrollbar-width:thin;scroll-padding-inline:4px}
+  .navigation-group{flex-direction:row;gap:4px;flex-shrink:0;padding-right:8px;border-right:1px solid var(--settings-line)}
+  .navigation-group:last-child{border:0;padding-right:0}
+  .page-tabs button{width:auto;white-space:nowrap;min-height:44px;padding:10px}
+  .workspace-content{gap:18px}
+  .workspace-heading h1{font-size:21px}
+  .workspace-heading-icon{flex-basis:42px;width:42px;height:42px;border-radius:13px}
+  .record-workspace,.persona-workspace{grid-template-columns:1fr}
+  .record-editor,.persona-editor{padding:20px}
+}
+@media(max-width:400px){.settings-main{padding:10px}.workspace-heading{gap:10px}.record-editor,.persona-editor{padding:16px 14px}}

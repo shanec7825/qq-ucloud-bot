@@ -21,7 +21,7 @@ async function sandbox(run) {
   try { await run(root); } finally { await rm(folder, { recursive: true, force: true }); }
 }
 test('通用默认配置不含个人账号，迁移环境并拒绝危险地址、重复群、未知字段和并发覆盖', () => sandbox(async root => {
-  const fresh = defaults({}); assert.equal(fresh.bot.name, 'slyra'); assert.equal(fresh.bot.ownerQQ, ''); assert.deepEqual(fresh.groups, []);
+  const fresh = defaults({}); assert.equal(fresh.bot.name, 'Qlyra'); assert.equal(fresh.bot.ownerQQ, ''); assert.deepEqual(fresh.groups, []);
   const migrated = defaults({ OWNER_QQ: '100000001', ALLOWED_GROUPS: '300000001, 300000002', GROUP_HISTORY_MODEL_GROUPS: '300000002' });
   assert.equal(migrated.groups[1].historyEnabled, true);
   for (const change of [c => c.qq.url = 'ws://evil.test:3001', c => c.ai.baseURL = 'http://evil.test/v1', c => c.groups.push(...migrated.groups, ...migrated.groups), c => c.bot.extra = 'unexpected']) {
@@ -80,6 +80,11 @@ test('网页设置经真实 HTTP 保存后用于 QQ 请求；跨站、伪 Host�
     await runtime.handler({ ...event, message_id: 2, message: [{ type: 'text', data: { text: '未@' } }] }); assert.equal(requests.length, 1);
     await runtime.notes.put({ scope: 'private:100000001', text: 'OWNER_PRIVATE_NOTE' }); await runtime.notes.put({ scope: 'group:300000001', text: 'OTHER_GROUP_NOTE' });
     await runtime.handler({ ...event, message_id: 3 }); assert.ok(!JSON.stringify(requests.at(-1).context).includes('PRIVATE_NOTE')); assert.ok(!JSON.stringify(requests.at(-1).context).includes('OTHER_GROUP_NOTE'));
+    const ordinaryMemory = await (await call('memory')).json(); assert.ok(!ordinaryMemory.conversations.some(c => c.scope === 'group:300000002'));
+    const memoryConfig = (await (await call('state')).json()).settings;
+    memoryConfig.chat.memoryContacts = [{ id: event.user_id, mode: 'memory', profileId: '' }];
+    assert.equal((await call('settings', 'PUT', { settings: memoryConfig, revision: memoryConfig.revision })).status, 200);
+    await runtime.handler({ ...event, message_id: 4 });
     const memory = await (await call('memory')).json(); assert.ok(memory.conversations.some(c => c.scope === 'group:300000002'));
     assert.equal((await call('memory/conversations', 'DELETE', { scope: 'group:300000002' })).status, 200); assert.equal(runtime.memory.get(event).length, 0);
     const before = await readFile(new URL('settings.json', root), 'utf8'); assert.ok(!before.includes('fake-qq-token'));

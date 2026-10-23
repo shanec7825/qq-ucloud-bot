@@ -1,4 +1,4 @@
-# QQ Agent
+# Qlyra
 
 在 QQ 里和 AI 聊天，也能让它帮你查资料、看作业、留意群通知。
 
@@ -8,8 +8,8 @@
 
 到 [下载页面](https://github.com/shanec7825/qq-ucloud-bot/releases) 选择 Windows x64 版本：
 
-- **安装版**：下载名称以 `QQ-Agent-Setup-` 开头的 `.exe`，安装后从桌面或开始菜单打开。
-- **便携版**：下载 `QQ-Agent-…-win-x64.zip`，完整解压后运行里面的 `QQAgent.exe`。不要只复制 exe。
+- **安装版**：下载名称以 `Qlyra-Setup-` 开头的 `.exe`，安装后从桌面或开始菜单打开 **Qlyra**。
+- **便携版**：下载 `Qlyra-…-win-x64.zip`，完整解压后运行里面的 `Qlyra.exe`。不要只复制 exe。
 - **已经有 NapCat**：直接安装 [独立插件](docs/PLUGIN-DISTRIBUTION.md)，无需再安装桌面应用。
 
 需要 Windows 10 / 11 x64、.NET Framework 4.8 和 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。具体下载文件以发行页面为准。
@@ -78,7 +78,7 @@
 
 ### 网页怎么打开和关闭？
 
-从桌面或开始菜单打开 **QQ Agent**，后台未启动时点 **启动机器人**。后台就绪后也可用浏览器访问 [NapCat 网页](http://127.0.0.1:6099/webui/)。关闭浏览器标签页只关闭页面；双击任务栏托盘图标可找回应用窗口。暂停 AI 回复请用托盘 **运行管理 → 停止机器人**，恢复时点 **启动机器人**。此操作保留 NapCat 网页和 QQ 连接。详细区别见 [网页与后台启停](docs/START-STOP.md)。
+从桌面或开始菜单打开 **Qlyra**，后台未启动时点 **启动机器人**。后台就绪后也可用浏览器访问 [NapCat 网页](http://127.0.0.1:6099/webui/)。关闭浏览器标签页只关闭页面；双击任务栏托盘图标可找回应用窗口。暂停 AI 回复请用托盘 **运行管理 → 停止机器人**，恢复时点 **启动机器人**。此操作保留 NapCat 网页和 QQ 连接。详细区别见 [网页与后台启停](docs/START-STOP.md)。
 
 ### 私人资料会开放给群成员吗？
 
@@ -87,6 +87,8 @@ GitHub、云盘等私人连接供管理员私聊使用。群成员可查询的�
 ### 升级会丢设置吗？
 
 已有项目继续使用原目录。默认工作区在 `%LOCALAPPDATA%\QQAgent\workspace`，设置、授权和记录保存在工作区中；卸载桌面应用不会删除它。升级前建议备份工作区，遇到问题不要直接删除 `data/` 或 `tools/`。
+
+Qlyra 沿用原 QQ Agent 的配置、安装身份与工作区目录，升级后继续使用原账号与记录。发行包保留 `QQAgent.exe` 兼容入口，原有固定快捷方式仍可打开同一个应用；新快捷方式与主程序名为 `Qlyra`。
 
 ## 开源许可
 

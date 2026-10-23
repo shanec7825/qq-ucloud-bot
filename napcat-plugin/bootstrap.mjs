@@ -33,7 +33,31 @@ export async function preparePortable(folder) {
       }
       await mkdir(projectRoot, { recursive: true });
       const q = value => "'" + value.replaceAll("'", "''") + "'";
-      await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath ${q(archive)} -DestinationPath ${q(projectRoot)} -Force`], { windowsHide: true, timeout: 120000 });
+      // Use the framework ZIP reader; PowerShell's optional Archive module may be absent.
+      const extraction = [
+        "$ErrorActionPreference='Stop'",
+        'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+        `$destinationRoot=[IO.Path]::GetFullPath(${q(projectRoot)}).TrimEnd([IO.Path]::DirectorySeparatorChar)+[IO.Path]::DirectorySeparatorChar`,
+        `$archiveReader=[IO.Compression.ZipFile]::OpenRead(${q(archive)})`,
+        'try { foreach($entry in $archiveReader.Entries) {',
+        '  $entryName=$entry.FullName.Replace([char]92,[char]47)',
+        "  if($entryName -match '(?:^|/)[.]{1,2}(?:/|$)|(?:^|/)[^/]*[. ](?:/|$)|[:\\x00-\\x1f]') { throw 'Archive path is not a safe relative Windows path.' }",
+        "  if($entryName -match '^(?:data|tools|\\.git)/|(?:^|/)\\.env(?:[./]|$)') { throw 'Archive contains personal-data paths.' }",
+        '  $targetFile=[IO.Path]::GetFullPath([IO.Path]::Combine($destinationRoot,$entryName))',
+        "  if(-not $targetFile.StartsWith($destinationRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'Archive path escapes destination.' }",
+        '  $checkPath=$targetFile',
+        '  while($checkPath -and $checkPath.Length -ge ($destinationRoot.Length-1)) {',
+        "    if(([IO.File]::Exists($checkPath) -or [IO.Directory]::Exists($checkPath)) -and (([IO.File]::GetAttributes($checkPath) -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'Archive destination contains a reparse point.' }",
+        '    $checkPath=[IO.Path]::GetDirectoryName($checkPath)',
+        '  }',
+        "  if($entryName.EndsWith('/')) { [IO.Directory]::CreateDirectory($targetFile) | Out-Null; continue }",
+        '  [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($targetFile)) | Out-Null',
+        '  $inputStream=$entry.Open(); $outputStream=$null',
+        '  try { $outputStream=[IO.File]::Open($targetFile,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None); $inputStream.CopyTo($outputStream) }',
+        '  finally { if($outputStream) { $outputStream.Dispose() }; $inputStream.Dispose() }',
+        '} } finally { $archiveReader.Dispose() }',
+      ].join('\n');
+      await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', extraction], { windowsHide: true, timeout: 120000 });
       await mkdir(join(projectRoot, 'data'), { recursive: true });
       await writeFile(join(projectRoot, 'data/napcat-ui.json'), JSON.stringify({ origin: 'http://127.0.0.1:6099', managedModules: true }));
       await writeFile(join(core, 'data/payload.sha256'), meta.backendSHA256);

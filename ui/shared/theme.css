@@ -1,19 +1,19 @@
-/* Shared theme tokens and design language for the NapCat settings page and the desktop wizard. */
+/* NapCat-inspired shared palette for the extension workspace and desktop launcher. */
 /* The NapCat shell owns its theme and overrides these variables inline; the desktop page uses the fallbacks below. */
 :root{
-  --heroui-background:0 0% 100%;
-  --heroui-foreground:201.82 24.44% 8.82%;
+  --heroui-background:330 100% 98.8%;
+  --heroui-foreground:250 24% 17%;
   --heroui-content1:0 0% 100%;
   --heroui-content2:240 4.76% 95.88%;
   --heroui-content3:240 5.88% 90%;
   --heroui-divider:0 0% 6.67%;
-  --heroui-focus:212.02 100% 46.67%;
-  --heroui-primary:212.02 100% 46.67%;
-  --heroui-primary-50:212.5 92.31% 94.9%;
-  --heroui-primary-100:211.84 92.45% 89.61%;
-  --heroui-primary-500:212.02 100% 46.67%;
-  --heroui-primary-600:212.14 100% 38.43%;
-  --heroui-primary-700:212.24 100% 28.82%;
+  --heroui-focus:330 81% 46%;
+  --heroui-primary:330.37 81.19% 60.39%;
+  --heroui-primary-50:327 100% 97.1%;
+  --heroui-primary-100:326 95% 94%;
+  --heroui-primary-500:330.37 81.19% 60.39%;
+  --heroui-primary-600:330 82% 41%;
+  --heroui-primary-700:331 80% 35%;
   --heroui-default-50:0 0% 98.04%;
   --heroui-default-100:240 4.76% 95.88%;
   --heroui-default-200:240 5.88% 90%;
@@ -25,27 +25,27 @@
   --heroui-default-800:240 3.7% 15.88%;
   --heroui-default-900:240 5.88% 10%;
   --heroui-success:145.96 79.46% 43.92%;
-  --heroui-success-600:146.01 79.89% 35.1%;
-  --heroui-warning-600:37.01 74.22% 44.12%;
+  --heroui-success-600:146 74% 28%;
+  --heroui-warning-600:37 78% 30%;
   --heroui-danger:339.2 90.36% 51.18%;
   --heroui-danger-600:339 86.54% 40.78%;
   color-scheme:light;
 }
-/* Dark values mirror @heroui/theme defaults; the page follows the system and honours an explicit .dark/.light class. */
+/* Dark surfaces keep the same soft plum hue; explicit .dark/.light overrides system preferences. */
 @media (prefers-color-scheme:dark){
   :root:not(.light){
-    --heroui-background:0 0% 0%;
+    --heroui-background:260 24% 9%;
     --heroui-foreground:210 5.56% 92.94%;
-    --heroui-content1:240 5.88% 10%;
-    --heroui-content2:240 3.7% 15.88%;
-    --heroui-content3:240 5.26% 26.08%;
+    --heroui-content1:260 19% 13%;
+    --heroui-content2:260 16% 18%;
+    --heroui-content3:260 13% 25%;
     --heroui-divider:0 0% 100%;
-    --heroui-primary:212.02 100% 46.67%;
-    --heroui-primary-50:211.84 100% 9.61%;
-    --heroui-primary-100:211.84 100% 19.22%;
-    --heroui-primary-500:212.14 92.45% 58.43%;
-    --heroui-primary-600:212.24 92.45% 68.82%;
-    --heroui-primary-700:211.84 92.45% 79.22%;
+    --heroui-primary:330.37 81.19% 60.39%;
+    --heroui-primary-50:330 40% 13%;
+    --heroui-primary-100:330 40% 22%;
+    --heroui-primary-500:330 86% 68%;
+    --heroui-primary-600:330 86% 75%;
+    --heroui-primary-700:330 90% 84%;
     --heroui-default-50:240 5.88% 10%;
     --heroui-default-100:240 3.7% 15.88%;
     --heroui-default-200:240 5.26% 26.08%;
@@ -63,17 +63,17 @@
   }
 }
 :root.dark{
-  --heroui-background:0 0% 0%;
+  --heroui-background:260 24% 9%;
   --heroui-foreground:210 5.56% 92.94%;
-  --heroui-content1:240 5.88% 10%;
-  --heroui-content2:240 3.7% 15.88%;
-  --heroui-content3:240 5.26% 26.08%;
+  --heroui-content1:260 19% 13%;
+  --heroui-content2:260 16% 18%;
+  --heroui-content3:260 13% 25%;
   --heroui-divider:0 0% 100%;
-  --heroui-primary-50:211.84 100% 9.61%;
-  --heroui-primary-100:211.84 100% 19.22%;
-  --heroui-primary-500:212.14 92.45% 58.43%;
-  --heroui-primary-600:212.24 92.45% 68.82%;
-  --heroui-primary-700:211.84 92.45% 79.22%;
+  --heroui-primary-50:330 40% 13%;
+  --heroui-primary-100:330 40% 22%;
+  --heroui-primary-500:330 86% 68%;
+  --heroui-primary-600:330 86% 75%;
+  --heroui-primary-700:330 90% 84%;
   --heroui-default-50:240 5.88% 10%;
   --heroui-default-100:240 3.7% 15.88%;
   --heroui-default-200:240 5.26% 26.08%;
@@ -94,16 +94,22 @@
   --qa-line:hsl(var(--heroui-default-200)/.8);
   --qa-muted:hsl(var(--heroui-default-600));
   --qa-accent:hsl(var(--heroui-primary));
+  --qa-accent-ink:hsl(var(--heroui-primary-600));
+  --qa-accent-solid:hsl(330 82% 41%);
+  --qa-violet:hsl(261 83% 70%);
+  --qa-cyan:hsl(190 83% 64%);
+  --qa-radius:18px;
+  --qa-shadow:0 8px 30px hsl(330 35% 35%/.05);
   --qa-ease:cubic-bezier(.2,.8,.2,1);
 }
 
 .ui-icon{display:block;flex-shrink:0;pointer-events:none}
 
 /* Status pills: the same language as the NapCat settings page. */
-.status-pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--qa-muted);background:hsl(var(--heroui-default-100)/.75);padding:5px 10px;border-radius:6px;max-width:100%;overflow-wrap:anywhere}
+.status-pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--qa-muted);background:hsl(var(--heroui-content1)/.8);padding:6px 11px;border:1px solid var(--qa-line);border-radius:999px;max-width:100%;overflow-wrap:anywhere}
 .status-pill:before{content:'';width:6px;height:6px;flex-shrink:0;border-radius:50%;background:currentColor}
 .status-pill.success{color:hsl(var(--heroui-success-600));background:hsl(var(--heroui-success)/.1)}
-.status-pill.danger{color:hsl(var(--heroui-danger));background:hsl(var(--heroui-danger)/.1)}
+.status-pill.danger{color:hsl(var(--heroui-danger-600));background:hsl(var(--heroui-danger)/.1)}
 .status-pill.warning{color:hsl(var(--heroui-warning-600));background:hsl(var(--heroui-warning-600)/.12)}
 .status-pill .pill-name{font-weight:400;opacity:.75}
 .status-pill .pill-value{font-weight:600}
@@ -111,28 +117,30 @@
 /* Inline feedback line, shared by both pages. */
 .feedback{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:16px}
 .feedback:empty{display:none}
-.feedback.error{color:hsl(var(--heroui-danger))}
+.feedback.error{color:hsl(var(--heroui-danger-600))}
 .feedback.success{color:hsl(var(--heroui-success-600))}
 
 /* Section card shared by the desktop setup wizard. */
-.setup-card{display:flex;flex-direction:column;gap:14px;min-width:0;padding:20px 22px;border:1px solid var(--qa-line);border-radius:16px;background:var(--qa-surface);box-shadow:0 1px 3px hsl(var(--heroui-foreground)/.05)}
+.setup-card{display:flex;flex-direction:column;gap:14px;min-width:0;padding:22px;border:1px solid var(--qa-line);border-radius:var(--qa-radius);background:var(--qa-surface);box-shadow:var(--qa-shadow)}
 .setup-card.span-all{grid-column:1/-1}
 .setup-card-header{display:flex;align-items:center;gap:10px;min-width:0;color:var(--qa-accent)}
 .setup-card-title{margin:0;font-size:15px;line-height:1.5;font-weight:600;color:hsl(var(--heroui-foreground));min-width:0;overflow-wrap:anywhere}
 .setup-badge{flex-shrink:0;font-size:11px;line-height:1.6;padding:1px 8px;border-radius:999px;color:var(--qa-muted);background:hsl(var(--heroui-default-100));border:1px solid var(--qa-line)}
-.setup-badge.required{color:var(--qa-accent);background:hsl(var(--heroui-primary)/.08);border-color:hsl(var(--heroui-primary)/.18)}
+.setup-badge.required{color:var(--qa-accent-ink);background:hsl(var(--heroui-primary)/.08);border-color:hsl(var(--heroui-primary)/.18)}
 .setup-card-description{margin:0;font-size:12px;line-height:1.7;color:var(--qa-muted);overflow-wrap:anywhere}
 .setup-card-body{display:flex;flex-direction:column;gap:10px;min-width:0}
-.setup-link{color:var(--qa-accent);text-decoration:underline;overflow-wrap:anywhere}
+.setup-link{color:var(--qa-accent-ink);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.empty-label{font-size:13px;color:hsl(var(--heroui-default-500));padding:12px 4px}
 
 /* Action buttons. The first button in .actions stays a compact single-line control. */
 .actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
-.action-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:40px;min-height:40px;max-width:100%;padding:0 14px;border:1px solid hsl(var(--heroui-default-300)/.85);border-radius:8px;background:var(--qa-surface);color:hsl(var(--heroui-foreground));font-size:13px;font-weight:500;line-height:1;white-space:nowrap;transition:background-color 140ms var(--qa-ease),border-color 140ms var(--qa-ease),color 140ms var(--qa-ease),box-shadow 140ms var(--qa-ease)}
-.action-button.primary{border-color:transparent;background:var(--qa-accent);color:#fff}
+.action-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;min-height:44px;max-width:100%;padding:0 16px;border:1px solid hsl(var(--heroui-default-300)/.85);border-radius:12px;background:var(--qa-surface);color:hsl(var(--heroui-foreground));font-size:13px;font-weight:600;line-height:1.3;white-space:nowrap;cursor:pointer;touch-action:manipulation;transition:background-color 140ms var(--qa-ease),border-color 140ms var(--qa-ease),color 140ms var(--qa-ease),box-shadow 140ms var(--qa-ease)}
+.action-button.primary{border-color:transparent;background:var(--qa-accent-solid);color:#fff;box-shadow:0 4px 14px hsl(var(--heroui-primary)/.2)}
 .action-button.ghost{border-color:transparent;background:transparent;color:var(--qa-muted)}
-.action-button:not(:disabled):hover{border-color:hsl(var(--heroui-primary)/.45);color:var(--qa-accent)}
-.action-button.primary:not(:disabled):hover{background:hsl(var(--heroui-primary-600));color:#fff;border-color:transparent}
-.action-button.ghost:not(:disabled):hover{background:hsl(var(--heroui-default-100));color:var(--qa-accent)}
+.action-button.small{height:36px;min-height:36px;padding:0 10px;font-size:12px;border-radius:9px}
+.action-button:not(:disabled):hover{border-color:hsl(var(--heroui-primary)/.45);color:var(--qa-accent-ink)}
+.action-button.primary:not(:disabled):hover{background:hsl(330 82% 35%);color:#fff;border-color:transparent;box-shadow:0 6px 20px hsl(var(--heroui-primary)/.28)}
+.action-button.ghost:not(:disabled):hover{background:hsl(var(--heroui-primary)/.08);color:var(--qa-accent-ink)}
 .action-button:not(:disabled):active{transform:translateY(1px)}
 .action-button:disabled{opacity:.5;cursor:not-allowed}
 .action-button:focus-visible{outline:2px solid hsl(var(--heroui-focus));outline-offset:3px}
@@ -144,9 +152,11 @@
 .check-name{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
 .check-detail{font-size:12px;line-height:1.6;color:var(--qa-muted);overflow-wrap:anywhere}
 .check-help{font-size:12px;line-height:1.6;color:var(--qa-muted);overflow-wrap:anywhere}
+.check-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0}
 .check-state{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;font-size:12px;color:var(--qa-muted);white-space:nowrap}
 .check-state.ok{color:hsl(var(--heroui-success-600))}
-.check-state.fail{color:hsl(var(--heroui-danger))}
+.check-state.fail{color:hsl(var(--heroui-danger-600))}
+.check-state.warning{color:hsl(var(--heroui-warning-600))}
 .check-state.unknown{color:var(--qa-muted)}
 .check-dot{width:6px;height:6px;flex-shrink:0;border-radius:50%;background:currentColor}
 .version-chip{font-size:11px;line-height:1.6;padding:1px 7px;border-radius:5px;background:hsl(var(--heroui-default-100));border:1px solid var(--qa-line);color:var(--qa-muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -160,6 +170,7 @@
 .progress-message{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;line-height:1.6;color:var(--qa-muted);overflow-wrap:anywhere}
 .progress-step{font-variant-numeric:tabular-nums}
 @media(prefers-reduced-motion:reduce){
+  .action-button{transition:none}
   .progress-fill{transition:none}
   .progress-fill.indeterminate{animation:none;width:100%;opacity:.5}
 }

@@ -26,7 +26,7 @@ export async function plugin_init(ctx) {
   const pluginId = descriptor.pluginId;
   let { projectRoot, nodeBinary } = descriptor;
   if (descriptor.distribution === 1) {
-    const shared = await import(pathToFileURL(join(dirname(folder), 'napcat-plugin-qq-agent/bootstrap.mjs')));
+    const shared = await import(pathToFileURL(join(dirname(folder), 'napcat-plugin-qq-agent/bootstrap.mjs')).href + new URL(import.meta.url).search);
     ({ projectRoot, nodeBinary } = await shared.preparePortable(folder));
   }
   const module = PLUGIN_MODULES.find(item => item.id === pluginId)?.module;
@@ -39,7 +39,7 @@ export async function plugin_init(ctx) {
   native = createNativeConfigAdapter({ module, bridge });
   registerBridge(ctx, bridge, native);
   ctx.router.static('/ui', 'webui');
-  const pageTitles = { core:'机器人', github:'GitHub', drive:'云盘', ucloud:'教学云', notices:'群消息' };
+  const pageTitles = { core:'chat', speech:'语音', github:'GitHub', drive:'云盘', ucloud:'ucloud', notices:'To Do' };
   ctx.router.page({ title: pageTitles[module], path: 'settings', htmlFile: 'webui/index.html', description: '插件设置' });
 
   await activity(true);

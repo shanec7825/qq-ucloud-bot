@@ -48,10 +48,10 @@ test('version 1 settings migrate without losing names/model/permissions and reje
 }));
 
 test('group profile changes actual model/name/prompt and memory scope; other group and private stay default', () => fixture(async ({ store, root }) => {
-  await store.update(configured(), 0);
+  const config = configured(); config.chat.defaultMode = 'memory'; await store.update(config, 0);
   const runtime = new BotRuntime(store, vault, { root }), calls = [], noteScopes = [];
   runtime.proxy.send = async () => []; runtime.members.prepare = async () => {}; runtime.media.prepare = async () => null;
-  runtime.notes.context = async (_event, options) => { noteScopes.push(options.profileId); return []; };
+  runtime.learner.context = async (_event, options) => { noteScopes.push(options.profileId); return []; };
   runtime.ai = async (_question, context, config) => { calls.push({ context, config }); return 'ok'; };
   runtime.apply();
   try {
@@ -92,7 +92,12 @@ test('workspace/inbox use authenticated HTTP and status writes require CSRF and 
     assert.equal((await call('workspace')).status, 401); assert.equal((await call('inbox')).status, 401);
     const login = await call('session', 'POST', { key: admin.accessKey }); cookie = login.headers.get('set-cookie').split(';')[0]; csrf = (await login.json()).csrf;
     const workspace = await (await call('workspace')).json(); assert.equal(workspace.profiles[0].id, 'study'); assert.equal(workspace.groups[0].profileName, '学习助手');
-    const inbox = await (await call('inbox')).json(); assert.equal(inbox.items.length, 1); const id = inbox.items[0].id;
+    const emptyInbox = await (await call('inbox')).json(); assert.deepEqual(emptyInbox.items, []);
+    const notifications = await (await call('notifications')).json(); assert.equal(notifications.digestItems.length, 1); assert.equal(notifications.digestItems[0].inTodo, false);
+    const id = notifications.digestItems[0].id;
+    assert.equal((await call('inbox/add', 'POST', { id }, '')).status, 403);
+    assert.equal((await call('inbox/add', 'POST', { id })).status, 200);
+    const inbox = await (await call('inbox')).json(); assert.equal(inbox.items.length, 1); assert.equal(inbox.items[0].status, 'pending');
     assert.equal((await call('inbox/item', 'PUT', { id, status: 'done' }, '')).status, 403);
     assert.equal((await call('inbox/item', 'PUT', { id, status: 'bad' })).status, 400);
     assert.equal((await call('inbox/item', 'PUT', { id, status: 'done' })).status, 200);

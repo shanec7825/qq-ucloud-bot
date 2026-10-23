@@ -2,10 +2,12 @@ import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { loginSchool } from './school-login.mjs';
-import { saveJSON } from './core.mjs';
+import { saveJSON, saveSchoolSession } from './core.mjs';
 import { memoryScope } from './managed-memory.mjs';
 import { GROUP_TEMPLATES } from './group-templates.mjs';
 import { validateMimoKey } from './xiaomi-speech.mjs';
+import { speechStyle, speechDirection, planSpeechStyle } from './speech-direction.mjs';
+import { SPEECH_REFERENCE_BASE64_LIMIT } from './speech-reference.mjs';
 
 const fail = (status, message) => { const error = new Error(message); error.status = status; throw error; };
 async function body(request, limit = 100000) {
@@ -18,6 +20,7 @@ const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer
 
 export async function startAdmin({ store, vault, runtime, root = new URL('../data/', import.meta.url), port = 6100, login = loginSchool, now = Date.now }) {
   let napcatOrigin;
+  const contactCache = new Map(), connectorChecks = {};
   try { const ui = JSON.parse(await readFile(new URL('napcat-ui.json', root), 'utf8')); if (/^http:\/\/127\.0\.0\.1:\d+$/.test(ui.origin)) napcatOrigin = ui.origin; } catch {}
   let accessKey;
   const keyFile = new URL('admin-access.key', root);
@@ -63,10 +66,56 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (route === '/api/logout' && req.method === 'POST') { sessions.delete(token); json({ ok: true }, 200, { 'set-cookie': 'slyra_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' }); return; }
       if (route === '/api/state' && req.method === 'GET') { json({ settings: store.get(), groupTemplates: GROUP_TEMPLATES, secrets: vault.flags(), status: await runtime.status(), googleRedirectURI: origin + '/oauth/google/callback' }); return; }
       if (route === '/api/workspace' && req.method === 'GET') { json(runtime.workspace()); return; }
+      if (route === '/api/chat' && req.method === 'GET') {
+        const cfg = store.get(), items = await runtime.learner.list();
+        const ids = new Set([...cfg.chat.memoryContacts.map(row => row.id), ...contactCache.keys(), ...items.map(row => row.contactId)]);
+        const contacts = [...ids].filter(id => /^\d{5,15}$/.test(id)).map(id => ({ id, name: contactCache.get(id)?.name || id }));
+        const digests = await Promise.all(cfg.groups.map(async group => ({ groupId: group.id, name: group.name, digest: await runtime.notes.digest(group.id) })));
+        json({ settings: { revision: cfg.revision, chat: cfg.chat, bot: { name: cfg.bot.name }, profiles: cfg.profiles.map(({ id, name }) => ({ id, name })) }, contacts, memory: { items, status: runtime.learner.status() }, conversations: runtime.memory.list(), digests }); return;
+      }
+      if (route === '/api/chat' && req.method === 'PUT') {
+        const input = await body(req);
+        if (!input || Object.keys(input).sort().join() !== 'defaultMode,memoryContacts,revision') fail(400, '联系人设置字段无效。');
+        const next = await store.update({ ...store.get(), chat: { defaultMode: input.defaultMode, memoryContacts: input.memoryContacts } }, input.revision);
+        runtime.apply(); json({ ok: true, revision: next.revision }); return;
+      }
+      if (route === '/api/chat/memory' && req.method === 'DELETE') {
+        const input = await body(req);
+        if (!input || Object.keys(input).join() !== 'contactId' || typeof input.contactId !== 'string' || !/^\d{5,15}$/.test(input.contactId)) fail(400, '请选择聊天对象。');
+        for (const row of runtime.memory.list()) if (row.scope.endsWith(':private:' + input.contactId) || row.scope === 'private:' + input.contactId) runtime.memory.clear(row.scope);
+        runtime.memory.clear('private:' + input.contactId);
+        runtime.agentSessions.clear(); runtime.pendingActions.clear(); runtime.native.selections.clear();
+        await runtime.learner.clearContact(input.contactId);
+        json({ ok: true }); return;
+      }
+      if (route === '/api/connectors/status' && req.method === 'GET') {
+        let account;
+        try { account = await runtime.account.status(); } catch { account = { authenticated: false, status: 'unavailable' }; }
+        const authenticated = account.authenticated === true || account.loggedIn === true;
+        json({ account, providers: Object.fromEntries(['github','google_drive'].map(provider => [provider, { ...connectorChecks[provider], available: runtime.connectors.apps.has(provider) || null, connected: authenticated && !!connectorChecks[provider]?.ok }])) }); return;
+      }
+      if (route === '/api/connectors/check' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Object.keys(input).join() !== 'provider' || !['github','google_drive'].includes(input.provider)) fail(400, '请选择 GitHub 或 Google Drive。');
+        if (runtime.handler.isBusy()) fail(409, '聊天正在使用连接，请稍后检测。');
+        try {
+          runtime.connectors.close();
+          const catalog = await runtime.connectors.readCatalog([input.provider]);
+          if (!catalog.length) throw new Error('尚未找到可用工具，请在 ChatGPT / Codex 连接对应应用。');
+          if (input.provider === 'github') await runtime.native.github(''); else await runtime.native.drive('列表', '');
+          connectorChecks[input.provider] = { ok: true, connected: true, available: true, message: '已验证读取权限', checkedAt: new Date().toISOString() };
+        } catch (error) { connectorChecks[input.provider] = { ok: false, connected: false, message: error.message || '请重新连接应用。', checkedAt: new Date().toISOString() }; }
+        json(connectorChecks[input.provider]); return;
+      }
       if (route === '/api/media' && req.method === 'GET') { json({ items: await runtime.outgoingMedia.list() }); return; }
+      if (route === '/api/media/online' && req.method === 'GET') { json({ items: await runtime.onlineMedia.catalog() }); return; }
+      if (route === '/api/media/online' && req.method === 'POST') {
+        const input = await body(req); if (!input || Object.keys(input).join() !== 'id' || typeof input.id !== 'string') fail(400, '请选择在线素材。');
+        json({ item: await runtime.onlineMedia.add(input.id) }); return;
+      }
       if (route === '/api/media' && req.method === 'POST') {
         const input = await body(req, 12 * 1024 * 1024);
-        if (!input || Object.keys(input).sort().join() !== 'accountId,base64,kind,name,targetId,type' || !store.get().accounts.some(a => a.id === input.accountId)) fail(400, '素材字段或账号无效。');
+        if (!input || Object.keys(input).sort().join() !== 'accountId,base64,kind,name,targetId,type' || !(input.accountId === '*' && input.kind === 'account' || store.get().accounts.some(a => a.id === input.accountId))) fail(400, '素材字段或账号无效。');
         json({ item: await runtime.outgoingMedia.put(input) }); return;
       }
       if (/^\/api\/media\/[a-f0-9]{32}$/.test(route) && req.method === 'DELETE') { await runtime.outgoingMedia.remove(route.split('/').at(-1)); json({ ok: true }); return; }
@@ -74,13 +123,62 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
         const input = await body(req), { item, bytes } = await runtime.outgoingMedia.bytes(input.id);
         json({ dataURL: `data:image/${item.mime};base64,${bytes.toString('base64')}` }); return;
       }
+      if (route === '/api/speech/reference' && req.method === 'POST') {
+        const input = await body(req, SPEECH_REFERENCE_BASE64_LIMIT + 8192);
+        if (!input || Array.isArray(input) || Object.keys(input).sort().join() !== 'base64,name') fail(400, '参考音频字段无效。');
+        json({ reference: await runtime.speechReferences.put(input) }); return;
+      }
+      if (route === '/api/speech/reference/start' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Array.isArray(input) || Object.keys(input).sort().join() !== 'name,size') fail(400, '参考音频上传字段无效。');
+        json(runtime.speechReferences.startUpload(input)); return;
+      }
+      if (route === '/api/speech/reference/chunk' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Array.isArray(input) || Object.keys(input).sort().join() !== 'base64,index,uploadId') fail(400, '参考音频分块字段无效。');
+        json(runtime.speechReferences.chunkUpload(input)); return;
+      }
+      if (route === '/api/speech/reference/finish' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Array.isArray(input) || Object.keys(input).join() !== 'uploadId') fail(400, '参考音频上传身份无效。');
+        json({ reference: await runtime.speechReferences.finishUpload(input) }); return;
+      }
+      if (route === '/api/speech/reference/cancel' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Array.isArray(input) || Object.keys(input).join() !== 'uploadId') fail(400, '参考音频上传身份无效。');
+        json(runtime.speechReferences.cancelUpload(input)); return;
+      }
+      if (route === '/api/speech/reference/preview' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || Array.isArray(input) || Object.keys(input).join() !== 'id') fail(400, '请选择已上传的参考音频。');
+        json(await runtime.speechReferences.preview(input.id)); return;
+      }
       if (route === '/api/speech/preview' && req.method === 'POST') {
         const input = await body(req);
-        if (!input || Object.keys(input).some(key => !['text','style'].includes(key))) fail(400, '试听字段无效。');
-        const part = await runtime.speech.synthesize(input.text, 'admin-preview', { style: input.style ?? '' });
-        json({ dataURL: 'data:audio/wav;base64,' + part.data.file.slice(9) }); return;
+        if (!input || Array.isArray(input) || Object.keys(input).some(key => !['text','style','autoStyle','conversation'].includes(key)) || input.autoStyle !== undefined && typeof input.autoStyle !== 'boolean' || input.conversation !== undefined && (typeof input.conversation !== 'string' || input.conversation.length > 1000 || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(input.conversation))) fail(400, '试听字段无效，对话情境须为 1000 字以内的文字。');
+        let style = speechStyle(input.style ?? '');
+        if (input.autoStyle && !style) {
+          const config = runtime.config();
+          const signature = JSON.stringify(config), key = runtime.vault?.get('mimoKey');
+          if (!config.speech.enabled) fail(400, '语音发送未启用，请先在语音设置中开启。');
+          try {
+            style = await planSpeechStyle(input.text, { direction: speechDirection(config.speech), ai: (question, context) => runtime.ai(question, context, config), conversation: input.conversation?.trim() ? [{ speaker: 'user', text: input.conversation.trim() }] : [] });
+          } catch (error) { fail(400, '自动语气分析未完成：' + (error.message || '请检查对话模型连接后重试。')); }
+          if (JSON.stringify(runtime.config()) !== signature || runtime.vault?.get('mimoKey') !== key) fail(409, '语音设置或授权已改变，请按当前设置重新试听。');
+        }
+        const part = await runtime.speech.synthesize(input.text, 'admin-preview', { style });
+        json({ dataURL: 'data:audio/wav;base64,' + part.data.file.slice(9), style }); return;
       }
       if (route === '/api/inbox' && req.method === 'GET') { json(await runtime.inbox.list()); return; }
+      if (route === '/api/notifications' && req.method === 'GET') { json(await runtime.inbox.notifications()); return; }
+      if (route === '/api/inbox/add' && req.method === 'POST') {
+        const input = await body(req); if (!input || Object.keys(input).join() !== 'id' || typeof input.id !== 'string') fail(400, '通知身份无效。');
+        json({ item: await runtime.inbox.addTodo(input.id) }); return;
+      }
+      if (route === '/api/inbox/calendar' && req.method === 'POST') {
+        const input = await body(req); if (!input || Object.keys(input).some(key => !['id','start','end','allDay'].includes(key)) || typeof input.id !== 'string') fail(400, '日历预览字段无效。');
+        const { id, ...options } = input; json(await runtime.inbox.calendarPreview(id, options)); return;
+      }
       if (route === '/api/inbox/item' && req.method === 'PUT') {
         const input = await body(req);
         if (!input || Object.keys(input).sort().join() !== 'id,status' || typeof input.id !== 'string' || !['pending', 'done', 'archived'].includes(input.status)) fail(400, '事项身份或状态无效。');
@@ -91,6 +189,7 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       }
       if (route === '/api/settings' && req.method === 'PUT') {
         const input = await body(req), old = store.get();
+        if (input?.settings?.speech?.referenceAudio) await runtime.speechReferences.bytes(input.settings.speech.referenceAudio);
         const next = await store.update(input.settings, input.revision);
         // A different OAuth client must obtain its own grant, never reuse a prior account token.
         if (old.drive.clientId !== next.drive.clientId) await vault.set({ googleTokens: null });
@@ -108,7 +207,7 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
         const input = await body(req);
         if (typeof input.username !== 'string' || !input.username.trim() || input.username.length > 80 || typeof input.password !== 'string' || !input.password || input.password.length > 500) fail(400, '请填写学号和密码。');
         loginBusy = true; runtime.schoolLoginBusy = true;
-        try { const result = await login(input.username.trim(), input.password); input.password = ''; await saveJSON(new URL('session.json', root), result); runtime.credentialVersion = (runtime.credentialVersion || 0) + 1; runtime.lastPoll = 0; runtime.checks.ucloud = { ok: true, message: '学校登录成功，密码未保存；可同步作业。', checkedAt: new Date().toISOString() }; json({ ok: true }); }
+        try { const result = await login(input.username.trim(), input.password); input.password = ''; await saveSchoolSession(new URL('session.json', root), result); runtime.credentialVersion = (runtime.credentialVersion || 0) + 1; runtime.lastPoll = 0; runtime.checks.ucloud = { ok: true, message: '学校登录成功，密码未保存；可同步作业。', checkedAt: new Date().toISOString() }; json({ ok: true }); }
         catch (error) { fail(400, /CAPTCHA/.test(error.code || '') ? '学校要求验证码，请使用浏览器登录备用流程。' : '学校登录未成功，请检查账号、密码或学校网络。'); }
         finally { input.password = ''; loginBusy = false; runtime.schoolLoginBusy = false; }
         return;
@@ -118,6 +217,12 @@ export async function startAdmin({ store, vault, runtime, root = new URL('../dat
       if (route === '/api/groups' && req.method === 'GET') { json({ groups: await runtime.groups() }); return; }
       if (route === '/api/qq/contacts' && req.method === 'POST') {
         const input = await body(req);
+        if (input && Object.keys(input).join() === 'all' && input.all === true) {
+          const results = await Promise.allSettled(store.get().accounts.filter(account => account.enabled).map(account => runtime.contacts(account.id)));
+          const friends = new Map(), groups = new Map(), errors = [];
+          for (const result of results) if (result.status === 'fulfilled') { for (const row of result.value.friends || []) { friends.set(row.id, row); contactCache.set(row.id, row); } for (const row of result.value.groups || []) groups.set(row.id, row); errors.push(...result.value.errors || []); } else errors.push('部分 QQ 连接暂不可用。');
+          json({ friends: [...friends.values()], groups: [...groups.values()], errors }); return;
+        }
         if (!input || Object.keys(input).some(k => k !== 'accountId') || typeof input.accountId !== 'string' || !store.get().accounts.some(a => a.id === input.accountId && a.enabled)) fail(400, '请选择已启用的 QQ 账号。');
         json(await runtime.contacts(input.accountId)); return;
       }

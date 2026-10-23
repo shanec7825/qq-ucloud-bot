@@ -1,5 +1,10 @@
 .env
 data/
+.test-tmp/
+.tmp/
+# Local deployment helpers depend on machine-specific backups and baselines.
+scripts/apply-message-flow.mjs
+scripts/apply-reply-protocol-fix.mjs
 node_modules/
 tools/
 release/

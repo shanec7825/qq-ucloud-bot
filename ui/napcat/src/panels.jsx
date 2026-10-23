@@ -6,19 +6,34 @@ import { Icon } from '../../shared/Icon.jsx';
 import { StatusPill } from '../../shared/StatusPill.jsx';
 import { searchStyle } from './controls.jsx';
 
+export const PAGE_ICONS = {chat:'contacts',profiles:'user',bot:'globe',bindings:'contacts',groups:'users',accounts:'contacts',ai:'sparkles',media:'image',speech:'mic',agent:'shield',library:'folder',notes:'book',memory:'bot',history:'clock',digests:'list',conversations:'mail',github:'cube',drive:'cloud',school:'book',realtime:'bell',monitor:'clock',inbox:'check',reports:'list'};
+
+export function WorkspaceShell({ navigation, page, hideHeading = false, children }) {
+  const copy=PAGE_COPY[page];
+  return <main className={'settings-main'+(!navigation?' standalone-workspace':'')} aria-label="插件设置">
+    {navigation}
+    <section className="workspace-content" role="tabpanel" id="workspace-panel" aria-labelledby={navigation?'nav-'+page:undefined} aria-label={!navigation?copy?.title:undefined}>
+      {!hideHeading&&<header className="workspace-heading"><span className="workspace-heading-icon"><Icon name={PAGE_ICONS[page]||'cog'} size={23}/></span><div><h1>{copy?.title}</h1><p id="description">{page==='profiles'?'默认设定与专属角色':page==='school'?'作业与通知':copy?.description}</p></div></header>}
+      {children}
+    </section>
+  </main>;
+}
+
 export function PageNavigation({ field, value, busy, onChange }) {
   if (!field) return null;
-  if (field.options.length === 1) return <h1 className="page-title">{PAGE_COPY[value]?.title}</h1>;
-  return <div className="page-tabs" role="tablist" aria-label="设置分类" onKeyDown={event=>{
-    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
-    const buttons=[...event.currentTarget.querySelectorAll('[role=tab]')],index=buttons.indexOf(document.activeElement);
-    const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;
-    event.preventDefault();buttons[next]?.focus();
-  }}>
-    {field.options.map(option => <Button key={option.value} role="tab" aria-selected={value === option.value}
-      tabIndex={value===option.value?0:-1} size="sm" variant="light"
-      isDisabled={busy} onPress={() => onChange(option.value)}>{option.label}</Button>)}
-  </div>;
+  const groups=[];
+  for(const option of field.options){const name=['accounts','ai','agent','library'].includes(option.value)?'设置':PAGE_COPY[option.value]?.group||'设置';let group=groups.find(g=>g.name===name);if(!group){group={name,options:[]};groups.push(group);}group.options.push(option);}
+  return <nav className={'workspace-navigation'+(field.options.length===1?' single-navigation':'')} aria-label="功能导航">
+    <div className="navigation-brand"><img src="../files/ui/qlyra.png" width="29" height="29" alt=""/><span>Qlyra</span></div>
+    <div className="page-tabs" role="tablist" aria-label="设置分类" aria-orientation="vertical" onKeyDown={event=>{
+      if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
+      const buttons=[...event.currentTarget.querySelectorAll('[role=tab]:not(:disabled)')],index=buttons.indexOf(document.activeElement);
+      const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(['ArrowRight','ArrowDown'].includes(event.key)?1:-1)+buttons.length)%buttons.length;
+      event.preventDefault();buttons[next]?.focus();
+    }}>
+      {groups.map(group=>{const Tag=group.name==='设置'?'details':'div';return <Tag className="navigation-group" role="presentation" key={group.name} open={group.name==='设置'&&group.options.some(option=>option.value===value)?true:undefined}>{group.name==='设置'?<summary><Icon name="cog"/>设置</summary>:<span className="navigation-group-label">{group.name}</span>}{group.options.map(option=><button type="button" id={'nav-'+option.value} key={option.value} role="tab" aria-controls="workspace-panel" aria-selected={value===option.value} tabIndex={value===option.value?0:-1} disabled={busy} onClick={()=>onChange(option.value)}><Icon name={PAGE_ICONS[option.value]||'cog'}/><span>{option.label}</span></button>)}</Tag>;})}
+    </div>
+  </nav>;
 }
 
 export function RecordList({ field, value, page, busy, onChange }) {

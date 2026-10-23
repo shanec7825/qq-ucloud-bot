@@ -22,9 +22,10 @@ test('one reply sends independent text and voice, and remembers both only after 
   const { deps, requests } = fixture();
   const reply = await mediaReply(JSON.stringify({ text: '地址发你了。', speech: { text: '路上慢一点，我等你。', style: '温柔关切' } }), event, deps, [], true);
   assert.equal(reply.text, '地址发你了。');
-  assert.deepEqual(requests, [{ text: '路上慢一点，我等你。', style: '温柔关切' }]);
+  assert.deepEqual(requests, [], 'planning the reply never waits for TTS');
   const sent = [];
   const delivered = await deliverReply(reply, { target: {}, bot: { send: async (_target, text) => { sent.push(text); return []; }, sendSegments: async () => { sent.push('voice'); return {}; } } });
+  assert.deepEqual(requests, [{ text: '路上慢一点，我等你。', style: '温柔关切' }]);
   assert.deepEqual(sent, ['地址发你了。', 'voice']);
   assert.match(delivered.summary, /地址发你了。\n\[语音\] 路上慢一点，我等你。/);
   assert.ok(!delivered.summary.includes('温柔关切'));
@@ -36,10 +37,12 @@ test('one reply sends independent text and voice, and remembers both only after 
 test('mixed replies can contain text with voice, text alone and voice alone in order', async () => {
   const { deps, requests } = fixture(false);
   const reply = await mediaReply(raw([{ text: '地点见文字。', speech: { text: '到啦喊我。', style: '轻快' } }, { text: '三号门', speech: { text: '' } }, { text: '', speech: { text: '我先过去啦。' } }]), event, deps, [], true);
+  const sent=[];const delivered=await deliverReply(reply,{target:{},bot:{send:async(_target,text)=>{sent.push(text);return [];},sendSegments:async()=>{sent.push('voice');return {};}}});
   assert.deepEqual(requests, [{ text: '到啦喊我。', style: '' }, { text: '我先过去啦。', style: '' }]);
-  assert.deepEqual(reply.messages.map(row => row.segments.length), [1, 0, 1]);
+  assert.deepEqual(sent,['地点见文字。','voice','三号门','voice']);
+  assert.deepEqual(reply.messages.map(row => typeof row.prepareSpeech === 'function'), [true, false, true]);
   assert.equal(reply.messages[2].text, '');
-  assert.equal(reply.messages[2].summary, '[语音] 我先过去啦。');
+  assert.match(delivered.summary, /\[语音\] 我先过去啦。/);
 });
 
 test('independent voice failure preserves the spoken content as visible text', async () => {
@@ -49,10 +52,11 @@ test('independent voice failure preserves the spoken content as visible text', a
   const row = { text: '地点见文字。', speech: { text: '到啦喊我。' } };
   for (const plan of [JSON.stringify(row), raw([row])]) {
     const reply = await mediaReply(plan, event, deps, [], true);
-    const message = reply.messages?.[0] || reply;
-    const text = typeof message === 'string' ? message : message.text;
-    assert.match(text, /语音未生成.*服务繁忙/);
-    assert.match(text, /到啦喊我。/);
+    const sent=[];const result=await deliverReply(reply,{target:{},bot:{send:async(_target,text)=>{sent.push(text);return [];},sendSegments:async()=>{throw Error('must not send absent audio');}}});
+    assert.equal(sent[0],'地点见文字。');
+    assert.equal(sent[1], '到啦喊我。');
+    assert.ok(!sent.join('').includes('服务繁忙'));
+    assert.match(result.summary,/到啦喊我/);assert.ok(!result.summary.includes('[语音]'));
   }
 });
 
@@ -63,6 +67,7 @@ test('speech payloads obey authorization, length and field boundaries before any
   assert.equal(requests.length, 0);
   const guarded = await mediaReply(JSON.stringify({ ...row, speech: { text: '替换', voice: 'Dean' } }), event, deps, [], true);
   assert.equal(guarded.text, '可见文字');
+  await deliverReply(guarded,{target:{},bot:{send:async()=>[],sendSegments:async()=>({})}});
   assert.equal(requests[0].text, '可见文字');
   requests.length = 0;
   for (const text of [null, {}, 'x'.repeat(101), '含\0控制符']) {
@@ -75,6 +80,7 @@ test('legacy replies keep read-aloud behavior and explicit empty voice suppresse
   const { deps, requests } = fixture();
   const legacy = await mediaReply(JSON.stringify({ text: '兼容原文', speech: { style: '自然' } }), event, deps, [], true);
   assert.equal(legacy.summary, '兼容原文');
+  await deliverReply(legacy,{target:{},bot:{send:async()=>[],sendSegments:async()=>({})}});
   assert.deepEqual(requests, [{ text: '兼容原文', style: '自然' }]);
   assert.equal(await mediaReply(JSON.stringify({ text: '只发文字', speech: { text: '' } }), event, deps, [], true), '只发文字');
   assert.equal(requests.length, 1);
@@ -90,5 +96,6 @@ test('chat plans independent speech even with automatic expression disabled, in 
   } });
   const reply = await routeNatural('用语音回答：怎么过去', event, deps);
   assert.equal(reply.messages[0].text, '文字说明');
+  await deliverReply(reply,{target:{},bot:{send:async()=>[],sendSegments:async()=>({})}});
   assert.deepEqual(requests, [{ text: '口语补充', style: '' }]);
 });
