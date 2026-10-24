@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { routeCommand, PRIVATE_ONLY, PublicCatalog, upcoming, replyTarget } from '../src/access.mjs';
+import { routeCommand, PRIVATE_ONLY, SCHOOL_ONLY, PublicCatalog, upcoming, replyTarget } from '../src/access.mjs';
 import { SchoolClient, saveJSON, readJSON } from '../src/core.mjs';
 import { PrivateResources } from '../src/resources.mjs';
 import { askCodex } from '../src/codex-ai.mjs';
@@ -35,11 +35,16 @@ test('他人和主人群聊都不能调用任何私人连接器或 AI，提示�
   }
 });
 
-test('他人能查公开作业和教材，详情任意 ID 只传给快照模块', async () => {
+test('作业和详情仅主人私聊或指定群可查，教材保持可查', async () => {
   const deps = dependencies();
-  assert.equal(await routeCommand('/作业', stranger, deps), '公开列表');
+  assert.equal(await routeCommand('/作业', stranger, deps), SCHOOL_ONLY);
   assert.equal(await routeCommand('/教材', stranger, deps), '公开教材');
-  assert.equal(await routeCommand('/详情 123', stranger, deps), '公开详情 123');
+  assert.equal(await routeCommand('/详情 123', stranger, deps), SCHOOL_ONLY);
+  assert.equal(await routeCommand('/作业', ownerGroup, deps), SCHOOL_ONLY);
+  assert.equal(await routeCommand('/作业', ownerDM, deps), '公开列表');
+  deps.schoolGroups = ['12345'];
+  assert.equal(await routeCommand('/作业', { ...ownerGroup, user_id: stranger.user_id }, deps), '公开列表');
+  assert.equal(await routeCommand('/详情 123', ownerGroup, deps), '公开详情 123');
   assert.deepEqual(deps.calls, []);
   assert.deepEqual(replyTarget(stranger), { user_id: '10001' });
   assert.deepEqual(replyTarget(ownerGroup), { group_id: '12345' });

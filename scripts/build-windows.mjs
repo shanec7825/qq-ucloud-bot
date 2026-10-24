@@ -13,6 +13,7 @@ await copyFile(join(root, 'desktop/assets/qlyra.ico'), join(app, 'app.ico'));
 for (const name of ['Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll']) await copyFile(join(sdk, 'lib/net462', name), join(app, name));
 await copyFile(join(sdk, 'runtimes/win-x64/native/WebView2Loader.dll'), join(app, 'WebView2Loader.dll'));
 for (const executable of ['Qlyra', 'QQAgent']) await copyFile(join(root, 'desktop/QQAgent.exe.config'), join(app, executable + '.exe.config'));
+await copyFile(join(root, 'desktop/Qlyra-Web.cmd'), join(app, 'Qlyra-Web.cmd'));
 async function copyAssets(folder, prefix) {
   for (const entry of await readdir(folder, { withFileTypes: true })) {
     const source = join(folder, entry.name), relative = prefix + entry.name;
@@ -29,7 +30,7 @@ await copyFile(join(root, 'docs/CONFIGURATION.md'), join(app, 'docs/CONFIGURATIO
 await copyFile(join(root, 'docs/PLUGIN-DISTRIBUTION.md'), join(app, 'docs/PLUGIN-DISTRIBUTION.md'));
 await copyFile(join(root, 'docs/WORKSPACE-ARCHITECTURE.md'), join(app, 'docs/WORKSPACE-ARCHITECTURE.md'));
 await copyFile(join(root, 'docs/NAPCAT-NATIVE-UI.md'), join(app, 'docs/NAPCAT-NATIVE-UI.md'));
-for (const name of ['ACCOUNT-PERSONAS.md', 'GROUP-NOTICES.md', 'MEDIA-MESSAGES.md', 'DEEPSEEK.md', 'PRODUCT-WORKSPACES.md', 'REPLY-PROTOCOL-V2.md', 'MESSAGE-FLOW-20261023.md', 'message-flow-20261023.html']) await copyFile(join(root, 'docs', name), join(app, 'docs', name));
+for (const name of ['ACCOUNT-PERSONAS.md', 'GROUP-NOTICES.md', 'MEDIA-MESSAGES.md', 'DEEPSEEK.md', 'PRODUCT-WORKSPACES.md', 'REPLY-PROTOCOL-V2.md', 'MESSAGE-FLOW-20261023.md', 'message-flow-20261023.html', 'START-STOP.md', 'desktop-web-start.html']) await copyFile(join(root, 'docs', name), join(app, 'docs', name));
 await mkdir(join(app, 'docs/releases'), { recursive: true });
 await copyFile(join(root, 'docs/releases/v' + pkg.version + '.md'), join(app, 'docs/releases/v' + pkg.version + '.md'));
 try { await copyFile(join(sdk, 'LICENSE.txt'), join(app, 'LICENSE-WebView2.txt')); } catch { throw new Error('WebView2 license missing'); }

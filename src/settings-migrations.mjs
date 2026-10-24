@@ -28,6 +28,7 @@ export function migrateSettings(value) {
   if (next.realtime && typeof next.realtime === 'object' && !Array.isArray(next.realtime)) next.realtime = { ...NOTICE_FILTER_DEFAULTS, ...next.realtime };
   if (next.monitor && typeof next.monitor === 'object' && !Array.isArray(next.monitor)) next.monitor = { ...NOTICE_DIGEST_DEFAULTS, ...next.monitor };
   if (next.drive && typeof next.drive === 'object') next.drive.accessMode ??= 'read';
+  if (next.school && typeof next.school === 'object' && !Array.isArray(next.school) && next.school.groups === undefined) next.school.groups = [];
   next.agent ??= { enabled: false, writes: false, maxSteps: 4 };
   if (Array.isArray(next.groups)) next.groups = next.groups.map(group => group && typeof group === 'object' && !Array.isArray(group) ? { template: 'auto', templatePrompt: '', profileId: '', ...group } : group);
   return next;

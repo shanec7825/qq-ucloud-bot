@@ -91,7 +91,7 @@ export function ContactPicker({ label, value, onChange, accountId, all = false, 
   }
   return <div className="contact-picker space-y-2">
     <Input {...fieldStyle} label={label} aria-label={label} value={String(value || '')} onValueChange={onChange} isDisabled={disabled}
-      description={multiple ? '支持多选，或用逗号分隔群号' : undefined} inputMode={multiple ? 'text' : 'numeric'} />
+      description={description || (multiple ? '支持多选，或用逗号分隔群号' : undefined)} inputMode={multiple ? 'text' : 'numeric'} />
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="flat" startContent={<Icon name="contacts"/>} isDisabled={disabled} isLoading={busy} onPress={load}>{rows === null ? (kind === 'groups' ? '从群列表选择' : '从好友列表选择') : '刷新列表'}</Button>
       {rows !== null && <Button size="sm" variant="light" onPress={() => setRows(null)}>收起列表</Button>}

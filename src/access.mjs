@@ -1,7 +1,8 @@
 import { readJSON, saveJSON, deadlineMs, taskLine } from './core.mjs';
 
-export const PRIVATE_ONLY = '这是私人功能，仅主人账号私聊可用。可使用 /作业、/详情 作业ID 或 /教材 查询公开资料。';
-export const help = '我是 ' + (process.env.BOT_NAME || 'slyra') + '。群里 @ 我直接问就行，比如“最近什么作业快截止了”“教材怎么解释偏序关系”；也能发图片或表情包。私聊无需 @。个人笔记和私人项目只在主人私聊里查。';
+export const PRIVATE_ONLY = '这是私人功能，仅主人账号私聊可用。可使用 /教材 查询共享教材；UCloud 作业仅主人私聊和指定群聊可查。';
+export const SCHOOL_ONLY = 'UCloud 作业仅对主人私聊和指定群聊开放，请由主人在 UCloud 设置中选择允许查询的群。';
+export const help = '我是 ' + (process.env.BOT_NAME || 'slyra') + '。群里 @ 我直接问就行，比如“教材怎么解释偏序关系”；也能发图片或表情包。私聊无需 @。UCloud 作业仅主人私聊和指定群聊可查，个人笔记和私人项目只在主人私聊里查。';
 
 export function upcoming(tasks, now = Date.now()) {
   return tasks.filter(task => deadlineMs(task.deadline) > now).sort((a, b) => deadlineMs(a.deadline) - deadlineMs(b.deadline)).slice(0, 20);
@@ -9,6 +10,10 @@ export function upcoming(tasks, now = Date.now()) {
 
 export function ownerPrivate(event, owner) {
   return event.message_type === 'private' && String(event.user_id) === owner;
+}
+
+export function canReadSchool(event, owner, groups = []) {
+  return !!event && (ownerPrivate(event, owner) || event.message_type === 'group' && Array.isArray(groups) && groups.includes(String(event.group_id)));
 }
 
 export function replyTarget(event) {
@@ -51,10 +56,12 @@ export class PublicCatalog {
 }
 
 export async function routeCommand(command, event, deps) {
-  // 公开分支只依赖独立快照；未授权消息无法到达学校、AI 或私人连接器。
+  // 作业快照也需要授权；教材不受学校作业权限影响。
   if (command === '/帮助') return deps.botName ? help.replace(process.env.BOT_NAME || 'slyra', deps.botName) : help;
-  if (command === '/作业') return deps.catalog.list();
-  if (command.startsWith('/详情 ')) return deps.catalog.detail(command.slice(4).trim());
+  if (command === '/作业' || command.startsWith('/详情 ')) {
+    if (!canReadSchool(event, deps.owner, deps.schoolGroups)) return SCHOOL_ONLY;
+    return command === '/作业' ? deps.catalog.list() : deps.catalog.detail(command.slice(4).trim());
+  }
   if (command === '/教材') return deps.catalog.books();
   if (!ownerPrivate(event, deps.owner)) return PRIVATE_ONLY;
   if (command.startsWith('/AI ')) return deps.ai(command.slice(4).slice(0, 4000), { tasks: await deps.catalog.upcomingTasks() });

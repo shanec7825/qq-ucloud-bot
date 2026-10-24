@@ -10,7 +10,7 @@ import { AgentSchool } from './agent-school.mjs';
 import { NativeAgentTools } from './agent-native.mjs';
 import { SchoolClient, readJSON, saveJSON, notificationPlan, askAI } from './core.mjs';
 import { OneBot } from './onebot.mjs';
-import { PublicCatalog, upcoming } from './access.mjs';
+import { PublicCatalog, upcoming, canReadSchool, SCHOOL_ONLY } from './access.mjs';
 import { PrivateResources } from './resources.mjs';
 import { GoogleDrive } from './google-drive.mjs';
 import { askCodex } from './codex-ai.mjs';
@@ -182,14 +182,26 @@ export class BotRuntime {
     const enabled = config.groups.filter(g => g.enabled);
     const services = this.services(accountId);
     if (!this.library || this.libraryRoot !== config.library.root) { this.libraryRoot = config.library.root; this.library = config.library.root ? new SharedLibrary(config.library.root) : null; }
-    const catalog = config.school.enabled ? this.catalog : {
-      list: async () => 'UCloud 未启用。', detail: async () => 'UCloud 未启用。', upcomingTasks: async () => [], books: () => this.catalog.books(),
+    const schoolStatus = () => {
+      const live = this.config();
+      return !canReadSchool(event, live.bot.ownerQQ, live.school.groups) ? SCHOOL_ONLY : live.school.enabled ? '' : 'UCloud 未启用。';
+    };
+    const readSchool = async (method, ...args) => {
+      const blocked = status => method === 'upcomingTasks' ? [] : status;
+      let status = schoolStatus();
+      if (status) return blocked(status);
+      const result = await this.catalog[method](...args);
+      status = schoolStatus();
+      return status ? blocked(status) : result;
+    };
+    const catalog = {
+      list: () => readSchool('list'), detail: id => readSchool('detail', id), upcomingTasks: () => readSchool('upcomingTasks'), books: () => this.catalog.books(),
     };
     const groupIds = [...new Set([...config.groups.map(g => g.id), ...(config.bindings || []).filter(b => b.accountId === accountId && b.kind === 'group').map(b => b.targetId)])];
     const policies = groupIds.map(id => resolveGroupPolicy(config, id, accountId));
     const observable = !this.stopped && (base.accounts?.find(a => a.id === accountId)?.enabled ?? accountId === 'default') && (!event?.transportGeneration || this.transports.get(accountId)?.generation === event.transportGeneration);
     return { enabled: observable && (!event || !Object.hasOwn(event, 'profileId') || event.profileId === conversation.profileId) && (conversation.kind !== 'private' || conversation.enabled) && moduleActive(this.root, 'core'), observeEnabled: observable, observe: event => { this.realtime.observe(event); if (moduleActive(this.root, 'core') && conversation.enabled) services.media.remember?.(event); }, capabilities: JSON.stringify([config, this.memory.version]), groups: policies.filter(g => g.canReply).map(g => g.id), owner: config.bot.ownerQQ, botName: config.bot.name, school: this.school, catalog,
-      memoryMode, learn: event => this.learner.observe(event, { profileId: conversation.profileId, mode: memoryMode }),
+      schoolGroups: config.school.groups, memoryMode, learn: event => this.learner.observe(event, { profileId: conversation.profileId, mode: memoryMode }),
       resources: this.resources(config), agent: this.agent(config), ai: (q, c, options) => this.ai(q, c, config, options), library: this.library, media: services.media, members: services.members,
       outgoingMedia: { list: event => this.outgoingMedia.available(event), outgoing: (event, id) => this.outgoingMedia.outgoing(event, id), collect: (event, input) => this.outgoingMedia.collect(event, input, { call: (action, params) => this.proxy.call(action, params, { accountId }) }) },
       speech: config.speech.enabled ? { ...speechDirection(config.speech), autoReply: config.speech.autoReply,
@@ -205,7 +217,7 @@ export class BotRuntime {
   apply() {
     this.learner.reconcile();
     const config = this.config(); this.memory.configure({ ...config.memory, enabled: true });
-    const personaSignature = JSON.stringify([config.accounts, config.bindings, config.profiles, config.groups, config.bot, config.ai, config.chat]);
+    const personaSignature = JSON.stringify([config.accounts, config.bindings, config.profiles, config.groups, config.bot, config.ai, config.chat, config.school.enabled, config.school.groups]);
     if (this.personaSignature && this.personaSignature !== personaSignature) this.memory.clear('all');
     this.personaSignature = personaSignature;
     const identities = new Map(config.groups.map(group => [group.id, JSON.stringify([profileSettings(config, group.id).bot, profileSettings(config, group.id).ai, group.profileId, group.template, group.templatePrompt])]));

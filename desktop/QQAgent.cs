@@ -17,8 +17,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyTitle("Qlyra")]
 [assembly: AssemblyProduct("Qlyra")]
 [assembly: AssemblyDescription("Qlyra Windows desktop AI companion for QQ")]
-[assembly: AssemblyVersion("2.6.1.0")]
-[assembly: AssemblyFileVersion("2.6.1.0")]
+[assembly: AssemblyVersion("2.6.2.0")]
+[assembly: AssemblyFileVersion("2.6.2.0")]
 
 namespace QQAgentDesktop {
     internal static class Program {
@@ -29,8 +29,8 @@ namespace QQAgentDesktop {
         internal static string Argument(string[] args, string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
         [STAThread] static void Main(string[] args) {
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
-            bool smoke = args.Contains("--self-test"), created;
-            using (var mutex = new Mutex(true, smoke ? "Local\\QQAgentDesktopSmoke" : "Local\\QQAgentDesktop", out created)) {
+            bool smoke = args.Contains("--self-test"), webOnly = args.Contains("--web") && !smoke, created;
+            using (var mutex = new Mutex(true, smoke ? "Local\\QQAgentDesktopSmoke" : webOnly ? "Local\\QQAgentWebLaunch" : "Local\\QQAgentDesktop", out created)) {
                 if (!created) { try { EventWaitHandle.OpenExisting("Local\\QQAgentDesktopShow").Set(); } catch { } return; }
                 Directory.CreateDirectory(AppData);
                 try { Application.Run(new MainWindow(args, smoke)); }
@@ -45,7 +45,7 @@ namespace QQAgentDesktop {
         readonly NotifyIcon tray = new NotifyIcon();
         readonly System.Windows.Forms.Timer refresh = new System.Windows.Forms.Timer();
         readonly List<ToolStripItem> actions = new List<ToolStripItem>();
-        readonly bool smoke;
+        readonly bool smoke, webOnly;
         readonly string[] arguments;
         string workspace, injection;
         bool busy, quitting, home = true, refreshInFlight;
@@ -57,10 +57,10 @@ namespace QQAgentDesktop {
         const string LocalOrigin = "http://127.0.0.1:6099";
 
         public MainWindow(string[] args, bool test) {
-            smoke = test; arguments = args; Text = "Qlyra"; Width = 1180; Height = 840; MinimumSize = new Size(900, 640);
+            smoke = test; webOnly = args.Contains("--web") && !test; arguments = args; Text = "Qlyra"; Width = 1180; Height = 840; MinimumSize = new Size(900, 640);
             StartPosition = FormStartPosition.CenterScreen; Font = new Font("Microsoft YaHei UI", 9F); BackColor = Color.FromArgb(244, 246, 248);
             AutoScaleMode = AutoScaleMode.Dpi; Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            if (smoke) { Opacity = 0; ShowInTaskbar = false; }
+            if (smoke || webOnly) { Opacity = 0; ShowInTaskbar = false; }
             progress.Dock = DockStyle.Bottom; progress.Height = 34; progress.Padding = new Padding(16, 8, 0, 0); progress.ForeColor = Color.FromArgb(82, 97, 115); progress.Text = "正在读取本机状态…";
             browser.Dock = DockStyle.Fill; browser.DefaultBackgroundColor = BackColor;
             Controls.Add(browser); Controls.Add(progress);
@@ -79,12 +79,12 @@ namespace QQAgentDesktop {
             AddAction(management.DropDownItems, "打开数据目录", delegate { OpenFolder(Path.Combine(workspace, "data")); return Task.FromResult(0); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("退出桌面程序（后台继续运行）", null, delegate { quitting = true; Close(); });
-            tray.Icon = Icon; tray.Text = "Qlyra · 双击打开"; tray.ContextMenuStrip = menu; tray.Visible = true; tray.DoubleClick += delegate { RestoreWindow(); };
+            tray.Icon = Icon; tray.Text = "Qlyra · 双击打开"; tray.ContextMenuStrip = menu; tray.Visible = !webOnly; tray.DoubleClick += delegate { RestoreWindow(); };
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (!quitting && !smoke && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; HideToTray(); } };
             FormClosed += delegate { refresh.Stop(); tray.Dispose(); if (showEvent != null) showEvent.Dispose(); };
             Shown += async delegate { await Initialize(); };
             refresh.Interval = 12000; refresh.Tick += async delegate { if (!busy && home) await RefreshStatus(); };
-            if (!smoke) { showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\QQAgentDesktopShow"); Task.Run(delegate { while (!IsDisposed) { try { if (showEvent.WaitOne(1500)) BeginInvoke((Action)RestoreWindow); } catch { break; } } }); }
+            if (!smoke && !webOnly) { showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\QQAgentDesktopShow"); Task.Run(delegate { while (!IsDisposed) { try { if (showEvent.WaitOne(1500)) BeginInvoke((Action)RestoreWindow); } catch { break; } } }); }
         }
         void AddAction(ToolStripItemCollection items, string label, Func<Task> action) {
             var item = new ToolStripMenuItem(label); item.Click += async delegate { await RunSafely(action); }; items.Add(item); actions.Add(item);
@@ -113,6 +113,11 @@ namespace QQAgentDesktop {
                     }
                 }
                 SaveWorkspace();
+                if (webOnly) {
+                    await Service("start", 150000);
+                    Process.Start(new ProcessStartInfo(LocalOrigin + "/webui/") { UseShellExecute = true });
+                    quitting = true; Close(); return;
+                }
                 environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Program.AppData, smoke ? "WebView2-smoke" : "WebView2"));
                 await browser.EnsureCoreWebView2Async(environment);
                 // NapCat plugin assets keep fixed URLs and can remain cached for 24 hours across upgrades.
@@ -139,6 +144,7 @@ namespace QQAgentDesktop {
                 if (smoke) await SmokeTest();
             } catch (Exception error) {
                 if (smoke) { WriteSmoke(false, error.Message); quitting = true; Close(); }
+                else if (webOnly) { Environment.ExitCode = 1; MessageBox.Show("网页端启动失败：" + error.Message, "Qlyra"); quitting = true; Close(); }
                 else { progress.Text = error.Message; MessageBox.Show("打开失败：" + error.Message + "\nWebView2 Runtime 下载：https://developer.microsoft.com/microsoft-edge/webview2/", "Qlyra"); }
             }
         }

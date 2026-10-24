@@ -35,7 +35,7 @@ test('对话上下文按群和私聊严格分开，风格样本不含发送者�
 });
 function dependencies() {
   const calls = [];
-  return { calls, owner: '100000001', shareDocumentsWithModel: true, catalog: { list: async () => '作业还没有同步。' }, persona: async () => ({ voice: ['说话自然一些'] }), library: { search: async q => { calls.push(['library', q]); return { available: [{ name: '教材.pdf' }], passages: [{ source: '教材.pdf', page: 3, excerpt: '只来自共享目录' }] }; } }, resources: { drive: async () => { throw new Error('群里不得访问私人网盘'); }, github: async () => { throw new Error('群里不得访问私人项目'); } }, ai: async (question, context) => { calls.push(['ai', context]); return '自然语言回答'; } };
+  return { calls, owner: '100000001', schoolGroups: ['300000001'], shareDocumentsWithModel: true, catalog: { list: async () => '作业还没有同步。' }, persona: async () => ({ voice: ['说话自然一些'] }), library: { search: async q => { calls.push(['library', q]); return { available: [{ name: '教材.pdf' }], passages: [{ source: '教材.pdf', page: 3, excerpt: '只来自共享目录' }] }; } }, resources: { drive: async () => { throw new Error('群里不得访问私人网盘'); }, github: async () => { throw new Error('群里不得访问私人项目'); } }, ai: async (question, context) => { calls.push(['ai', context]); return '自然语言回答'; } };
 }
 
 test('多个允许群均可 @ 对话，回复目标和上下文按群隔离，其他群不能触发', async () => {

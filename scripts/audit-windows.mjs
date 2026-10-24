@@ -23,5 +23,7 @@ for (const marker of markers) {
 }
 const portableName = 'Qlyra-' + pkg.version + '-win-x64.zip', portable = unzipSync(await readFile(join(folder, portableName)));
 if (!portable['Qlyra/Qlyra.exe'] || !portable['Qlyra/Qlyra.exe.config'] || !portable['Qlyra/QQAgent.exe'] || !portable['Qlyra/runtime/node.exe'] || !portable['Qlyra/WebView2Loader.dll'] || !portable['Qlyra/assets/qlyra.png']) throw new Error('便携包缺少 Qlyra 运行文件或兼容入口。');
+if (!portable['Qlyra/Qlyra-Web.cmd'] || !portable['Qlyra/docs/START-STOP.md'] || !portable['Qlyra/docs/desktop-web-start.html']) throw new Error('便携包缺少网页启动入口或启动说明。');
+for (const path of ['src/access.mjs', 'src/natural-chat.mjs', 'src/settings-migrations.mjs', 'napcat-plugin/webui/copy.mjs']) if (!backend[path]) throw new Error('发行后端缺少 UCloud 权限模块：' + path);
 const report = { passed: true, version: pkg.version, backendFiles: paths.length, backendMatchesSource: true, messageFlowIncluded: true, noDevelopmentPatchScripts: true, noPersonalDirectories: true, noLocalCredentialFingerprints: true, portableStructureValid: true, excluded: ['.env', 'data/', 'tools/', 'QQ cache', 'school sessions', 'cloud authorization'] };
 await writeFile(join(folder, 'release-audit.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));

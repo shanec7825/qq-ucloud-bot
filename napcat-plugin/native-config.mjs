@@ -103,7 +103,7 @@ export function createNativeConfigAdapter({module='core',bridge,now=Date.now,ttl
     if(p==='realtime') result.push(field('preview','text','在线消息 → 按群通知 → 本地待办'));
     if(p==='monitor') result.push(field('preview','text','关注群保持静默',{appearance:'status'}));
     if(p==='agent') {add('ownerQQ',cfg.bot.ownerQQ,'string');result.push(field('preview','text','仅管理员私聊 · 修改前确认',{appearance:'status'}));}
-    if(!f._expanded&&['bot','groups','bindings','notes','realtime','monitor'].includes(p))result.push(field('directory','select',f.directory||'manual',{label:'号码来源',reactive:true,options:[{value:'manual',label:'手动填写'},{value:'qq',label:'从 QQ 选择'}]}));
+    if(!f._expanded&&['bot','groups','bindings','notes','realtime','monitor','school'].includes(p))result.push(field('directory','select',f.directory||'manual',{label:'号码来源',reactive:true,options:[{value:'manual',label:'手动填写'},{value:'qq',label:'从 QQ 选择'}]}));
     if(s.directoryError&&f.directory==='qq')result.push(field('directory_error','text',s.directoryError));
     return shapeSchema(presentSchema(result, p),p,f,s.state);
   }

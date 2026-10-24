@@ -144,11 +144,11 @@ function App() {
       if(field.key==='preview'&&['accounts','realtime'].includes(page))return null;
       return <div key={field.key} className={readOnly?'reader-body':'wide-field'}><StatusText field={field}/></div>;
     }
-    const contact=name==='id'&&page==='groups'||name==='targetId'||['ownerQQ','recipientQQ'].includes(name)||name==='groups'&&['realtime','monitor'].includes(page);
+    const contact=name==='id'&&page==='groups'||name==='targetId'||['ownerQQ','recipientQQ'].includes(name)||name==='groups'&&['realtime','monitor','school'].includes(page);
     if(contact){
       const accountId=get('accountId')||(page==='notes'?config['note_account_'+resourceValue]:'')||'default';
       const kind=name==='id'||name==='groups'||name==='targetId'&&(page==='notes'?config['note_kind_'+resourceValue]:get('kind'))!=='private'?'groups':'friends';
-      return <ContactPicker key={field.key+accountId+kind} label={field.label} value={value} accountId={accountId} all={page==='groups'||name==='ownerQQ'} kind={kind} multiple={name==='groups'} disabled={busy} onChange={(v,row)=>{
+      return <ContactPicker key={field.key+accountId+kind} label={field.label} description={field.description} value={value} accountId={accountId} all={page==='groups'||page==='school'||name==='ownerQQ'} kind={kind} multiple={name==='groups'} disabled={busy} onChange={(v,row)=>{
         if(row&&page==='groups'&&!get('name')){
           const before=current.current,nameField=fields.find(f=>f.key.endsWith('__name'));
           install({...before,config:{...before.config,[field.key]:v,...(nameField?{[nameField.key]:row.name}:{})}});setDirty(true);

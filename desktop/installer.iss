@@ -39,6 +39,7 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: checkedonce
 Source: "{#AppFiles}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{autoprograms}\Qlyra\Qlyra"; Filename: "{app}\Qlyra.exe"; WorkingDir: "{app}"
+Name: "{autoprograms}\Qlyra\Qlyra 网页版"; Filename: "{app}\Qlyra.exe"; Parameters: "--web"; WorkingDir: "{app}"
 Name: "{autodesktop}\Qlyra"; Filename: "{app}\Qlyra.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 Name: "{autoprograms}\Qlyra\卸载 Qlyra"; Filename: "{uninstallexe}"
 [InstallDelete]

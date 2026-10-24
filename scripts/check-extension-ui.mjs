@@ -200,6 +200,16 @@ if (serveOnly) {
     }
 
     await open('napcat-plugin-agent-ucloud'); await page.getByRole('button', { name: '重新连接', exact: true }).click(); await page.getByLabel('学号', { exact: true }).fill('fixture-student'); await page.getByLabel('学校密码', { exact: true }).fill('fixture-password'); await page.getByRole('button', { name: /登录(?:教学云|ucloud)/, exact: false }).click(); await saved('登录成功'); assert.equal(schoolLogins, 1);
+    const replyGroups = structuredClone(settings.groups);
+    const schoolPicker = page.locator('.contact-picker').filter({ has: page.getByLabel('允许查询作业的群', { exact: true }) });
+    assert.deepEqual(settings.school.groups, []);
+    await schoolPicker.getByRole('button', { name: '从群列表选择', exact: true }).click();
+    for (const contact of contacts.groups.slice(0, 2)) await schoolPicker.getByRole('button', { name: new RegExp(contact.id) }).click();
+    await save(); assert.deepEqual(settings.school.groups, contacts.groups.slice(0, 2).map(contact => contact.id)); assert.deepEqual(settings.groups, replyGroups);
+    await open('napcat-plugin-agent-ucloud'); await page.getByRole('tab', { name: '连接与提醒', exact: true }).click();
+    assert.equal(await page.getByLabel('允许查询作业的群', { exact: true }).inputValue(), settings.school.groups.join(', '));
+    await page.screenshot({ path: 'data/ui-fixtures/ucloud-school-access.png', fullPage: true, animations: 'disabled' });
+    await page.getByLabel('允许查询作业的群', { exact: true }).fill(''); await save(); assert.deepEqual(settings.school.groups, []);
     await page.getByRole('tab', { name: '待交作业', exact: true }).click();
     const taskRow = page.locator('.school-record-entry').filter({ hasText: '本周练习' }); await taskRow.getByText('操作系统', { exact: true }).waitFor();
     const submissionLink = taskRow.getByRole('link', { name: '前往提交：本周练习', exact: true });

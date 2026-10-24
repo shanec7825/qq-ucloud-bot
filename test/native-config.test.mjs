@@ -32,6 +32,28 @@ test('native QQ directory is an explicit read and exposes selectable numbers',as
  const adapter=createNativeConfigAdapter({bridge}),f=await adapter.getConfig();f.page='groups';let schema;await adapter.onConfigChange({updateSchema(value){schema=value;}},'directory','qq',f);const target=schema.find(x=>x.key.endsWith('__id'));assert.equal(target.type,'select');assert.ok(target.options.some(o=>o.value==='123456'));assert.equal(calls.filter(c=>c.path==='qq/contacts').length,1);assert.equal(calls.filter(c=>c.method==='PUT').length,0);
 });
 
+test('UCloud has a separate group multiselect and clearing it restores owner-only access',async()=>{
+ const state={settings:defaults({ALLOWED_GROUPS:'345678'}),status:{}},calls=[];
+ const bridge={async request(method,path,value){
+  calls.push({method,path,value});
+  if(path==='state')return {status:200,data:structuredClone(state)};
+  if(path==='memory')return {status:200,data:{notes:[],digests:[],conversations:[]}};
+  if(path==='qq/contacts')return {status:200,data:{groups:[{id:'123456',name:'课程群'},{id:'234567',name:'实验群'}],friends:[],errors:[]}};
+  if(path==='settings'){state.settings=validateSettings(value.settings);state.settings.revision++;}
+  return {status:200,data:{ok:true}};
+ }};
+ const adapter=createNativeConfigAdapter({module:'ucloud',bridge});let f=await adapter.getConfig(),schema;
+ assert.equal(adapter.schema(f).find(field=>field.key.endsWith('__groups')).default,'');
+ await adapter.onConfigChange({updateSchema(value){schema=value;}},'directory','qq',f);f.directory='qq';
+ const groups=schema.find(field=>field.key.endsWith('__groups'));
+ assert.equal(groups.label,'允许查询作业的群');assert.equal(groups.type,'multi-select');assert.equal(groups.options.length,2);
+ f[groups.key]=['123456','234567'];await adapter.setConfig(f);
+ assert.deepEqual(state.settings.school.groups,['123456','234567']);assert.deepEqual(state.settings.groups.map(group=>group.id),['345678']);
+ f=await adapter.getConfig();assert.equal(adapter.schema(f).find(field=>field.key.endsWith('__groups')).default,'123456, 234567');
+ f[key(adapter,f,'groups')]='';await adapter.setConfig(f);assert.deepEqual(state.settings.school.groups,[]);
+ assert.equal(calls.filter(call=>call.path==='qq/contacts').length,1);
+});
+
 test('native control initialization does not close menus with redundant schema updates',async()=>{
  const {adapter}=setup();const f=await adapter.getConfig();let updates=0;const ui={updateSchema(){updates++;}};await adapter.controller(ui,f);assert.equal(updates,1);await adapter.onConfigChange(ui,'page',f.page,f);assert.equal(updates,1);await adapter.onConfigChange(ui,'page','groups',f);assert.equal(updates,2);await adapter.onConfigChange(ui,'page','groups',{...f,page:'groups'});assert.equal(updates,2);
 });
